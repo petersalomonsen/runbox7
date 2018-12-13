@@ -30,12 +30,55 @@ export class SearchExpressionBuilderComponent implements OnInit {
   searchInputField: HTMLInputElement;
 
   @Input()
+  toSearchInputField: HTMLInputElement;
+
+  @Input()
+  fromSearchInputField: HTMLInputElement;
+
+  subjectSearchInputFieldDisplayValue: string;
+  @Input()
+  subjectSearchInputField: HTMLInputElement;
+
+  dateSearchInputFieldDisplayValue: string;
+  @Input()
+  dateSearchInputField: HTMLInputElement;
+
+  @Input()
+  freeTextSearchInputField: HTMLInputElement;
+
+  @Input()
   currentFolder: string;
 
   constructor() { }
 
   ngOnInit() {
+    this.subjectSearchInputFieldDisplayValue = this.subjectSearchInputField.style.display;
+    this.subjectSearchInputField.onkeyup = () => this.rebuildSearchExpression();
+    this.dateSearchInputFieldDisplayValue = this.dateSearchInputField.style.display;
+    this.dateSearchInputField.onkeyup = () => this.rebuildSearchExpression();
+  }
 
+  rebuildSearchExpression() {
+    let firstExpression = true;
+    const and = () => {
+      if (firstExpression) {
+        firstExpression = false;
+        return '';
+      } else {
+        return ' AND ';
+      }
+    };
+    this.searchInputField.value = (this.subjectSearchInputField.value ?
+        `${and()}subject:"${this.subjectSearchInputField.value}"` : '') +
+        (this.toSearchInputField.value ?
+          `${and()}to:"${this.toSearchInputField.value}"` : '') +
+        (this.fromSearchInputField.value ?
+          `${and()}from:"${this.fromSearchInputField.value}"` : '') +
+        (this.dateSearchInputField.value ?
+          `${and()}date:${this.dateSearchInputField.value}` : '') +
+        (this.freeTextSearchInputField.value ?
+        `${and()}(${this.freeTextSearchInputField.value})` : '');
+    this.searchInputField.dispatchEvent(new Event('keyup'));
   }
 
   setSearchInputField(val: string) {
@@ -43,8 +86,16 @@ export class SearchExpressionBuilderComponent implements OnInit {
     this.searchInputField.dispatchEvent(new Event('keyup'));
   }
 
+  toggleVisible(element: HTMLInputElement) {
+    if (element.style.display === 'none') {
+      element.style.display = this.subjectSearchInputFieldDisplayValue;
+    } else {
+      element.style.display = 'none';
+    }
+  }
+
   subject() {
-    this.setSearchInputField('subject:"Type subject here"');
+    this.toggleVisible(this.subjectSearchInputField);
   }
 
   from() {
@@ -61,17 +112,20 @@ export class SearchExpressionBuilderComponent implements OnInit {
 
   selectYear(event: Date) {
     const d = this.removeTimezoneFromDate(event);
-    this.setSearchInputField(`date:${d.getFullYear()}`);
+    this.dateSearchInputField.value = `${d.getFullYear()}`;
+    this.dateSearchInputField.dispatchEvent(new Event('keyup'));
   }
 
   selectMonth(event: Date) {
     const d = this.removeTimezoneFromDate(event);
-    this.setSearchInputField(`date:${d.toJSON().replace(/\-/g, '').substring(0, 'yyyyMM'.length)}`);
+    this.dateSearchInputField.value = `${d.toJSON().replace(/\-/g, '').substring(0, 'yyyyMM'.length)}`;
+    this.dateSearchInputField.dispatchEvent(new Event('keyup'));
   }
 
-  selectDate(event) {
+  selectDate(event: any) {
     const d = this.removeTimezoneFromDate(event.value);
-    this.setSearchInputField(`date:${d.toJSON().replace(/\-/g, '').substring(0, 'yyyyMMdd'.length)}`);
+    this.dateSearchInputField.value = `${d.toJSON().replace(/\-/g, '').substring(0, 'yyyyMMdd'.length)}`;
+    this.dateSearchInputField.dispatchEvent(new Event('keyup'));
   }
 
   limitToSelectedFolder() {

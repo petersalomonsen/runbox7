@@ -67,10 +67,8 @@ export class SearchService {
   public initSubject: AsyncSubject<any> = new AsyncSubject();
   public noLocalIndexFoundSubject: AsyncSubject<any> = new AsyncSubject();
 
+  // This is fired when UI should refresh the search ( search results altered )
   public searchResultsSubject: Subject<any> = new Subject();
-
-  // This is fired for every message processed (used by table for refreshing)
-  public indexHasUpdatesSubject: Subject<any> = new Subject();
 
   public localSearchActivated = false;
   public downloadProgress: number = null;
@@ -124,6 +122,9 @@ export class SearchService {
    * (workaround while waiting for deleted_messages support, but also a good extra check)
    */
   pendingIndexVerifications: {[id: string]: any} = {};
+
+  pendingMessagesToProcess: (MessageInfo | MessageFlagChange)[];
+  processMessageIndex = 0;
 
   /**
    * Used by the canvas table. We store one row at the time so that we don't look up the document data
@@ -204,7 +205,11 @@ export class SearchService {
       .pipe(
         mergeMap((msgFlagChange) => this.postMessagesToXapianWorker([msgFlagChange])),
         tap(() => {
-          this.reloadDatabases();
+          this.searchResultsSubject.next();
+        }),
+        catchError(e => {
+          console.error(e);
+          return of(null);
         })
       )
       .subscribe();
@@ -470,38 +475,43 @@ export class SearchService {
       })));
   }
 
-  postMessagesToXapianWorker(messages: (MessageInfo | MessageFlagChange)[]): Observable<any> {
+  postMessagesToXapianWorker(newMessagesToProcess: (MessageInfo | MessageFlagChange)[]): Observable<any> {
     if (!this.localSearchActivated) {
       return new Observable(o => o.next());
     }
 
+    if (!this.pendingMessagesToProcess) {
+      this.pendingMessagesToProcess = newMessagesToProcess;
+    } else {
+      this.pendingMessagesToProcess = this.pendingMessagesToProcess.concat(newMessagesToProcess);
+    }
+
     return new Observable(observer => {
       // Test for indexing on main thread
-      let processMessageIndex = 0;
 
       const indexingTools = new IndexingTools(this.api);
-      const getProgressSnackBarMessageText = () => `Syncing ${processMessageIndex} / ${messages.length}`;
+      const getProgressSnackBarMessageText = () => `Syncing ${this.processMessageIndex} / ${this.pendingMessagesToProcess.length}`;
       let progressSnackBar: MatSnackBarRef<SyncProgressComponent>;
-      if (messages.length > 10) {
+      if (this.pendingMessagesToProcess.length > 10) {
         progressSnackBar = this.snackbar.openFromComponent(SyncProgressComponent);
         progressSnackBar.instance.messagetextsubject.next(getProgressSnackBarMessageText());
       }
 
       const processMessage = () => {
-        if (!this.localSearchActivated) {
+        if (!this.localSearchActivated || !this.pendingMessagesToProcess) {
           // Handle that index is deleted in the middle of an indexing process
           observer.next();
-        } else if (processMessageIndex < messages.length) {
-          this.processMessageHistoryProgress = Math.round(processMessageIndex * 100 / messages.length);
+        } else if (this.processMessageIndex < this.pendingMessagesToProcess.length) {
+          this.processMessageHistoryProgress = Math.round(this.processMessageIndex * 100 / this.pendingMessagesToProcess.length);
 
-          console.log('Adding to index', (messages.length - processMessageIndex), 'to go');
+          console.log('Adding to index', (this.pendingMessagesToProcess.length - this.processMessageIndex), 'to go');
           if (progressSnackBar) {
             progressSnackBar.instance.messagetextsubject.next(getProgressSnackBarMessageText());
           }
 
-          this.rmmapi.deleteFromMessageContentsCache(messages[processMessageIndex].id);
+          this.rmmapi.deleteFromMessageContentsCache(this.pendingMessagesToProcess[this.processMessageIndex].id);
 
-          const nextMessage = messages[processMessageIndex++];
+          const nextMessage = this.pendingMessagesToProcess[this.processMessageIndex++];
           if (nextMessage instanceof MessageInfo) {
             indexingTools.addMessageToIndex(nextMessage, [
               this.messagelistservice.spamFolderName,
@@ -519,15 +529,18 @@ export class SearchService {
           }
 
           // Notify about changes in the index (for canvas table to update)
-          this.indexHasUpdatesSubject.next(true);
           setTimeout(() => processMessage(), 1);
         } else {
           console.log('All messages added');
           this.api.commitXapianUpdates();
+
           if (progressSnackBar) {
             progressSnackBar.dismiss();
           }
           this.processMessageHistoryProgress = null;
+          this.pendingMessagesToProcess = null;
+          this.processMessageIndex = 0;
+
           // this.searchResultsSubject.next();
           observer.next();
         }
@@ -536,22 +549,13 @@ export class SearchService {
     });
   }
 
-  reloadDatabases() {
-    // console.log('Reloading databases - so that we get fresh search results');
-    // this.api.closeXapianDatabase();
-    // this.openStoredXapianDatabases();
-    this.searchResultsSubject.next();
-  }
-
   persistIndex(): Observable<boolean> {
     if (this.persistIndexInProgress || !this.localSearchActivated) {
       return new Observable(o => o.next(true));
     } else {
       this.persistIndexInProgress = true;
 
-      this.reloadDatabases();
-
-      console.log('Persisting to indexeddb - this may hang the app for few secs');
+      console.log('Persisting to indexeddb');
       return new Observable(observer => {
         FS.writeFile('indexLastUpdateTime', '' + this.indexLastUpdateTime, { encoding: 'utf8' });
         FS.syncfs(false, () => {
@@ -716,9 +720,6 @@ export class SearchService {
             unprocessed[unprocessed.length - 1].messageDate.getTime();
         return this.postMessagesToXapianWorker(unprocessed)
                 .pipe(
-                  mergeMap(() =>
-                    this.persistIndex()
-                  ),
                   map(() => unprocessed)
                 );
         }

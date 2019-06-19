@@ -161,7 +161,7 @@ export class AppComponent implements OnInit, AfterViewInit, CanvasTableSelectLis
     this.messageActionsHandler.searchService = searchService;
     this.messageActionsHandler.snackBar = snackBar;
 
-    this.rmmapi.messageFlagChangeSubject.subscribe(() => this.canvastable.hasChanges = true);
+    this.searchService.indexHasUpdatesSubject.subscribe(() => this.canvastable.hasChanges = true);
 
     this.renderer.listen(window, 'keydown', (evt: KeyboardEvent) => {
       if (Object.keys(this.selectedRowIds).length === 1 && this.singlemailviewer.messageId) {
@@ -489,7 +489,7 @@ export class AppComponent implements OnInit, AfterViewInit, CanvasTableSelectLis
 
   public isBoldRow(rowObj: any) {
     if (this.showingSearchResults) {
-      return this.searchService.api.getNumericValue(rowObj[0], 4) === 0;
+      return this.searchService.getDocData(rowObj[0]).seen ? false : true;
     } else if (this.showingWebSocketSearchResults) {
       return !(rowObj as WebSocketSearchMailRow).seen;
     } else {

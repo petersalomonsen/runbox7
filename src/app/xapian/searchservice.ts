@@ -46,6 +46,19 @@ declare var Module;
 
 export const XAPIAN_GLASS_WR = 'xapianglasswr';
 
+export class SearchIndexDocumentData {
+  id: string;
+  from: string;
+  subject: string;
+  recipients: string;
+  textcontent: string;
+  folder?: string;
+  flagged?: boolean;
+  seen?: boolean;
+  answered?: boolean;
+  attachment?: boolean;
+}
+
 @Injectable()
 export class SearchService {
 
@@ -55,6 +68,9 @@ export class SearchService {
   public noLocalIndexFoundSubject: AsyncSubject<any> = new AsyncSubject();
 
   public searchResultsSubject: Subject<any> = new Subject();
+
+  // This is fired for every message processed (used by table for refreshing)
+  public indexHasUpdatesSubject: Subject<any> = new Subject();
 
   public localSearchActivated = false;
   public downloadProgress: number = null;
@@ -108,6 +124,13 @@ export class SearchService {
    * (workaround while waiting for deleted_messages support, but also a good extra check)
    */
   pendingIndexVerifications: {[id: string]: any} = {};
+
+  /**
+   * Used by the canvas table. We store one row at the time so that we don't look up the document data
+   * from the search index db multiple times (for each column) when processing a row
+   */
+  currentXapianDocId: number;
+  currentDocData: SearchIndexDocumentData;
 
   constructor(public rmmapi: RunboxWebmailAPI,
        private router: Router,
@@ -489,12 +512,14 @@ export class SearchService {
                 indexingTools.flagMessage(nextMessage.id, nextMessage.flaggedFlag);
             }
             if (nextMessage.seenFlag !== null) {
-              indexingTools.flagMessage(nextMessage.id, nextMessage.seenFlag);
+              indexingTools.markMessageSeen(nextMessage.id, nextMessage.seenFlag);
             }
           } else {
             console.error('unsupported message type ( should not happen )', nextMessage);
           }
 
+          // Notify about changes in the index (for canvas table to update)
+          this.indexHasUpdatesSubject.next(true);
           setTimeout(() => processMessage(), 1);
         } else {
           console.log('All messages added');
@@ -853,61 +878,64 @@ export class SearchService {
         );
     }
 
-    public getCanvasTableColumns(app: AppComponent): CanvasTableColumn[] {
-      let currentDocId: number;
-      let currentDocData: any;
+    /**
+     * Look up document data from the database. If the id is the same as from the previous request, it will use
+     * the previous lookup result, otherwise look up from the database with the new id
+     * 
+     * @param docid the id of the document in the Xapian database (NOT the same as the RMM message id)
+     */
+    public getDocData (docid: number): SearchIndexDocumentData {
+        if (docid !== this.currentXapianDocId) {
+          const docdataparts = this.api.getDocumentData(docid).split('\t');
 
-      const getDocData: (docid: number) => any = (docid) => {
-          if (docid !== currentDocId) {
-            const docdataparts = this.api.getDocumentData(docid).split('\t');
+          this.currentDocData = {
+            id: docdataparts[0],
+            from: docdataparts[1],
+            subject: docdataparts[2],
+            recipients: '',
+            textcontent: null
+          };
 
-            currentDocData = {
-              id: docdataparts[0],
-              from: docdataparts[1],
-              subject: docdataparts[2],
-              recipients: '',
-              textcontent: null
-            };
+          this.rmmapi.getMessageContents(parseInt(this.currentDocData.id.substring(1), 10))
+            .subscribe(contentobj => {
+              this.currentDocData.textcontent = contentobj.text.text;
+            });
 
-            this.rmmapi.getMessageContents(parseInt(currentDocData.id.substring(1), 10))
-              .subscribe(contentobj => {
-                currentDocData.textcontent = contentobj.text.text;
-              });
-
-            this.api.documentXTermList(docid);
-              (Module.documenttermlistresult as string[])
-                .forEach(s => {
-                  if (s.indexOf('XFOLDER:') === 0) {
-                    currentDocData.folder = s.substr('XFOLDER:'.length);
-                  } else if (s === 'XFflagged') {
-                    currentDocData.flagged = true;
-                  } else if (s === 'XFseen') {
-                    currentDocData.seen = true;
-                  } else if (s === 'XFanswered') {
-                    currentDocData.answered = true;
-                  } else if (s === 'XFattachment') {
-                    currentDocData.attachment = true;
-                  } else if (s.indexOf('XRECIPIENT') === 0) {
-                    const recipient = s.substring('XRECIPIENT:'.length);
-                    if (currentDocData.recipients) {
-                      currentDocData.recipients += (', ' + recipient);
-                    } else {
-                      currentDocData.recipients = recipient;
-                    }
+          this.api.documentXTermList(docid);
+            (Module.documenttermlistresult as string[])
+              .forEach(s => {
+                if (s.indexOf('XFOLDER:') === 0) {
+                  this.currentDocData.folder = s.substr('XFOLDER:'.length);
+                } else if (s === 'XFflagged') {
+                  this.currentDocData.flagged = true;
+                } else if (s === 'XFseen') {
+                  this.currentDocData.seen = true;
+                } else if (s === 'XFanswered') {
+                  this.currentDocData.answered = true;
+                } else if (s === 'XFattachment') {
+                  this.currentDocData.attachment = true;
+                } else if (s.indexOf('XRECIPIENT') === 0) {
+                  const recipient = s.substring('XRECIPIENT:'.length);
+                  if (this.currentDocData.recipients) {
+                    this.currentDocData.recipients += (', ' + recipient);
+                  } else {
+                    this.currentDocData.recipients = recipient;
                   }
-                });
-            currentDocId = docid;
+                }
+              });
+          this.currentXapianDocId = docid;
 
-            if (!this.pendingIndexVerifications[currentDocData.id]) {
-              if (currentDocData.folder === 'Sent' && !currentDocData.recipients) {
-                currentDocData.folder = 'Sent '; // Force updating index to add recipient term
-              }
-              this.pendingIndexVerifications[currentDocData.id] = currentDocData;
+          if (!this.pendingIndexVerifications[this.currentDocData.id]) {
+            if (this.currentDocData.folder === 'Sent' && !this.currentDocData.recipients) {
+              this.currentDocData.folder = 'Sent '; // Force updating index to add recipient term
             }
+            this.pendingIndexVerifications[this.currentDocData.id] = this.currentDocData;
           }
-          return currentDocData;
-      };
+        }
+        return this.currentDocData;
+    }
 
+    public getCanvasTableColumns(app: AppComponent): CanvasTableColumn[] {
       const columns: CanvasTableColumn[] = [
               {
                   sortColumn: null,
@@ -930,14 +958,14 @@ export class SearchService {
             (app.selectedFolder.indexOf('Sent') === 0 && !app.displayFolderColumn) ? {
               name: 'To',
               sortColumn: null,
-              getValue: (rowobj): string => getDocData(rowobj[0]).recipients,
+              getValue: (rowobj): string => this.getDocData(rowobj[0]).recipients,
               width:  app.canvastablecontainer.getSavedColumnWidth(2, 300)
             } :
             {
               name: 'From',
               sortColumn: 0,
               getValue: (rowobj): string => {
-                return getDocData(rowobj[0]).from;
+                return this.getDocData(rowobj[0]).from;
               },
               width:  app.canvastablecontainer.getSavedColumnWidth(2, 300)
             },
@@ -945,14 +973,14 @@ export class SearchService {
               name: 'Subject',
               sortColumn: 1,
               getValue: (rowobj): string => {
-                return getDocData(rowobj[0]).subject;
+                return this.getDocData(rowobj[0]).subject;
               },
               width:  app.canvastablecontainer.getSavedColumnWidth(3, 300),
               draggable: true,
               getContentPreviewText: (rowobj): string => {
-                const ret = getDocData(rowobj[0]).textcontent;
+                const ret = this.getDocData(rowobj[0]).textcontent;
                 return ret ? ret.trim() : '';
-              }
+              },
               // tooltipText: 'Tip: Drag subject to a folder to move message(s)'
             }
         ];
@@ -1016,7 +1044,7 @@ export class SearchService {
               textAlign: 2,
               rowWrapModeHidden: true,
               font: '16px \'Material Icons\'',
-              getValue: (rowobj: MessageInfo): boolean => getDocData(rowobj[0]).attachment ? true : false,
+              getValue: (rowobj: MessageInfo): boolean => this.getDocData(rowobj[0]).attachment ? true : false,
               width: 35,
               getFormattedValue: (val) => val ? '\uE226' : ''
           });
@@ -1026,7 +1054,7 @@ export class SearchService {
               textAlign: 2,
               rowWrapModeHidden: true,
               font: '16px \'Material Icons\'',
-              getValue: (rowobj: MessageInfo): boolean => getDocData(rowobj[0]).answered ? true : false,
+              getValue: (rowobj: MessageInfo): boolean => this.getDocData(rowobj[0]).answered ? true : false,
               width: 35,
               getFormattedValue: (val) => val ? '\uE15E' : ''
           });
@@ -1036,7 +1064,7 @@ export class SearchService {
               textAlign: 2,
               rowWrapModeHidden: true,
               font: '16px \'Material Icons\'',
-              getValue: (rowobj: MessageInfo): boolean => getDocData(rowobj[0]).flagged ? true : false,
+              getValue: (rowobj: MessageInfo): boolean => this.getDocData(rowobj[0]).flagged ? true : false,
               width: 35,
               getFormattedValue: (val) => val ? '\uE153' : ''
           });
@@ -1046,7 +1074,7 @@ export class SearchService {
               sortColumn: null,
               name: 'Folder',
               rowWrapModeHidden: true,
-              getValue: (rowobj): string => getDocData(rowobj[0]).folder.replace(/\./g, '/'),
+              getValue: (rowobj): string => this.getDocData(rowobj[0]).folder.replace(/\./g, '/'),
               width: 200
             });
           }

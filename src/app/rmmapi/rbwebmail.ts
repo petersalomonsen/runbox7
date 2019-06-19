@@ -147,9 +147,18 @@ export class MessageContents {
 }
 
 export class MessageFlagChange {
-    id: number;
-    seenFlag: boolean;
-    flaggedFlag: boolean;
+    /**
+     * @param id message id
+     * @param seenFlag seen flag - set to null if N/A
+     * @param flaggedFlag flagged flag - set to null if N/A
+     */
+    constructor(
+        public id: number,
+        public seenFlag: boolean,
+        public flaggedFlag: boolean
+    ) {
+
+    }
 }
 
 @Injectable()
@@ -391,22 +400,19 @@ export class RunboxWebmailAPI {
 
     public markSeen(messageId: any, seen_flag_value = 1): Observable<any> {
         return this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ seen_flag: seen_flag_value }))
-            .pipe(
-                mergeMap(() => this.listAllMessages(0, parseInt('' + messageId, 10) + 1, 0, 1, false)),
-                map((msgInfos) => msgInfos[0]),
-                tap((msgInfo) => this.messageFlagChangeSubject.next(msgInfo))
-            );
+        .pipe(
+            tap((msgInfo) => this.messageFlagChangeSubject.next(
+                new MessageFlagChange(messageId, seen_flag_value === 1 ? true : false, null)
+            ))
+        );
     }
 
     public markFlagged(messageId: any, flagged_flag_value = 1): Observable<any> {
         return this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ flagged_flag: flagged_flag_value }))
             .pipe(
-                mergeMap(() => this.listAllMessages(0,
-                    parseInt('' + messageId, 10) + 1,
-                    0, 1, false)
-                ),
-                map((msgInfos) => msgInfos[0]),
-                tap((msgInfo) => this.messageFlagChangeSubject.next(msgInfo))
+                tap((msgInfo) => this.messageFlagChangeSubject.next(
+                    new MessageFlagChange(messageId, null, flagged_flag_value === 1 ? true : false)
+                ))
             );
     }
 

@@ -639,11 +639,13 @@ export class SearchService {
     if (!this.api) {
       return;
     }
-    messageIds.forEach(mid =>
-      this.api.deleteDocumentByUniqueTerm('Q' + mid)
+    this.postMessagesToXapianWorker(messageIds.map(mid =>
+          new SearchIndexDocumentUpdate(mid, () =>
+            this.api.deleteDocumentByUniqueTerm('Q' + mid)
+          )
+        )
     );
-    this.api.commitXapianUpdates();
-    this.searchResultsSubject.next();
+
   }
 
   /**

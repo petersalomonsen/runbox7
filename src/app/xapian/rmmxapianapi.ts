@@ -58,6 +58,11 @@ export class XapianAPI {
     Module.cwrap('setStringValue', null, ['number', 'number', 'string']);
   public changeDocumentsFolder: (unique_term: string, folder: string) =>
     void = Module.cwrap('changeDocumentsFolder', null, ['string', 'string']);
+  public addTermToDocument: (idterm: string, termname: string) => void = Module.cwrap('addTermToDocument', null, ['string', 'string']);
+  public removeTermFromDocument: (idterm: string, termname: string) => void =
+        Module.cwrap('removeTermFromDocument', null, ['string', 'string']);
+  public addTextToDocument: (idterm: string, withoutpositions: boolean, text: string) => void =
+        Module.cwrap('addTextToDocument', null, ['string', 'boolean', 'string']);
 
   public getStringValue(docid, slot): string {
     const $ret = Module._malloc(1024);

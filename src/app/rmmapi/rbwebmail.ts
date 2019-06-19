@@ -146,12 +146,18 @@ export class MessageContents {
     text: MessageTextContents;
 }
 
+export class MessageFlagChange {
+    id: number;
+    seenFlag: boolean;
+    flaggedFlag: boolean;
+}
+
 @Injectable()
 export class RunboxWebmailAPI {
 
     public static readonly LIST_ALL_MESSAGES_CHUNK_SIZE: number = 1000;
 
-    public markSeenSubject: Subject<MessageInfo> = new Subject();
+    public messageFlagChangeSubject: Subject<MessageFlagChange> = new Subject();
     public me: AsyncSubject<RunboxMe> = new AsyncSubject();
     public rblocale: any;
 
@@ -388,7 +394,7 @@ export class RunboxWebmailAPI {
             .pipe(
                 mergeMap(() => this.listAllMessages(0, parseInt('' + messageId, 10) + 1, 0, 1, false)),
                 map((msgInfos) => msgInfos[0]),
-                tap((msgInfo) => this.markSeenSubject.next(msgInfo))
+                tap((msgInfo) => this.messageFlagChangeSubject.next(msgInfo))
             );
     }
 
@@ -400,7 +406,7 @@ export class RunboxWebmailAPI {
                     0, 1, false)
                 ),
                 map((msgInfos) => msgInfos[0]),
-                tap((msgInfo) => this.markSeenSubject.next(msgInfo))
+                tap((msgInfo) => this.messageFlagChangeSubject.next(msgInfo))
             );
     }
 

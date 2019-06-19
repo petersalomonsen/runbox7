@@ -161,7 +161,7 @@ export class AppComponent implements OnInit, AfterViewInit, CanvasTableSelectLis
     this.messageActionsHandler.searchService = searchService;
     this.messageActionsHandler.snackBar = snackBar;
 
-    this.rmmapi.markSeenSubject.subscribe(() => this.canvastable.hasChanges = true);
+    this.rmmapi.messageFlagChangeSubject.subscribe(() => this.canvastable.hasChanges = true);
 
     this.renderer.listen(window, 'keydown', (evt: KeyboardEvent) => {
       if (Object.keys(this.selectedRowIds).length === 1 && this.singlemailviewer.messageId) {

@@ -23,7 +23,7 @@ import { ProgressService} from '../http/progress.service';
 import { Router } from '@angular/router';
 import { Observable ,  AsyncSubject ,  BehaviorSubject ,  Subject ,  of, from  } from 'rxjs';
 import { XapianAPI } from './rmmxapianapi';
-import { RunboxWebmailAPI, RunboxMe } from '../rmmapi/rbwebmail';
+import { RunboxWebmailAPI, RunboxMe, MessageFlagChange } from '../rmmapi/rbwebmail';
 import { MessageInfo,
     IndexingTools } from './messageinfo';
 import { CanvasTableColumn} from '../canvastable/canvastable';
@@ -177,9 +177,9 @@ export class SearchService {
     this.downloadProgress = 0; // Set indeterminate progress bar
 
     // Update locally generated index with message seen flag
-    this.rmmapi.markSeenSubject
+    this.rmmapi.messageFlagChangeSubject
       .pipe(
-        mergeMap((msg) => this.postMessagesToXapianWorker([msg])),
+        mergeMap((msgFlagChange) => this.postMessagesToXapianWorker([msgFlagChange])),
         tap(() => {
           this.reloadDatabases();
         })
@@ -447,7 +447,7 @@ export class SearchService {
       })));
   }
 
-  postMessagesToXapianWorker(messages: MessageInfo[]): Observable<any> {
+  postMessagesToXapianWorker(messages: (MessageInfo | MessageFlagChange)[]): Observable<any> {
     if (!this.localSearchActivated) {
       return new Observable(o => o.next());
     }
@@ -478,10 +478,23 @@ export class SearchService {
 
           this.rmmapi.deleteFromMessageContentsCache(messages[processMessageIndex].id);
 
-          indexingTools.addMessageToIndex(messages[processMessageIndex++], [
-            this.messagelistservice.spamFolderName,
-            this.messagelistservice.trashFolderName
-          ]);
+          const nextMessage = messages[processMessageIndex++];
+          if (nextMessage instanceof MessageInfo) {
+            indexingTools.addMessageToIndex(nextMessage, [
+              this.messagelistservice.spamFolderName,
+              this.messagelistservice.trashFolderName
+            ]);
+          } else if (nextMessage instanceof MessageFlagChange) {
+            if (nextMessage.flaggedFlag !== null) {
+                indexingTools.flagMessage(nextMessage.id, nextMessage.flaggedFlag);
+            }
+            if (nextMessage.seenFlag !== null) {
+              indexingTools.flagMessage(nextMessage.id, nextMessage.seenFlag);
+            }
+          } else {
+            console.error('unsupported message type ( should not happen )', nextMessage);
+          }
+
           setTimeout(() => processMessage(), 1);
         } else {
           console.log('All messages added');

@@ -613,18 +613,22 @@ export class SearchService {
         const destinationFolder = folders.find(folder => folder.folderPath === destinationfolderPath);
 
         if (destinationFolder.folderType === 'spam' || destinationFolder.folderType === 'trash') {
-          messageIds.forEach(mid => {
-            this.api.deleteDocumentByUniqueTerm('Q' + mid);
-            console.log('Deleted msg id search index', mid);
-          }
+          this.postMessagesToXapianWorker(messageIds.map(mid =>
+              new SearchIndexDocumentUpdate(mid, () => {
+                this.api.deleteDocumentByUniqueTerm('Q' + mid);
+                console.log('Deleted msg id search index', mid);
+              })
+            )
           );
         } else {
           const dotSeparatedDestinationfolderPath = destinationfolderPath.replace(/\//g, '.');
-          messageIds.forEach(mid =>
-            this.api.changeDocumentsFolder('Q' + mid, dotSeparatedDestinationfolderPath));
+          this.postMessagesToXapianWorker(messageIds.map(mid =>
+              new SearchIndexDocumentUpdate(mid, () => {
+                this.api.changeDocumentsFolder('Q' + mid, dotSeparatedDestinationfolderPath);
+              })
+            )
+          );
         }
-        this.api.commitXapianUpdates();
-        this.searchResultsSubject.next();
     });
   }
 

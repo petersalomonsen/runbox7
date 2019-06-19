@@ -94,8 +94,6 @@ export class SearchService {
 
   lowestindexid = 0;
 
-  reloadXapianDataBaseInProgress = false;
-
   serverIndexSize = -1;
   serverIndexSizeUncompressed = -1;
 
@@ -110,7 +108,7 @@ export class SearchService {
   initcalled = false;
   partitionDownloadProgress: number = null;
 
-  persistIndexInProgress = false;
+  persistIndexInProgressSubject: AsyncSubject<any> = null;
 
   /**
    * Keep track of earlier change polls so that we don't reindex what we've already processed
@@ -123,6 +121,7 @@ export class SearchService {
    */
   pendingIndexVerifications: {[id: string]: any} = {};
 
+  messageProcessingInProgressSubject: AsyncSubject<any> = null;
   pendingMessagesToProcess: (MessageInfo | MessageFlagChange)[];
   processMessageIndex = 0;
 
@@ -134,7 +133,6 @@ export class SearchService {
   currentDocData: SearchIndexDocumentData;
 
   constructor(public rmmapi: RunboxWebmailAPI,
-       private router: Router,
        private http: Http,
        private httpclient: HttpClient,
        private ngZone: NgZone,
@@ -477,17 +475,12 @@ export class SearchService {
 
   postMessagesToXapianWorker(newMessagesToProcess: (MessageInfo | MessageFlagChange)[]): Observable<any> {
     if (!this.localSearchActivated) {
-      return new Observable(o => o.next());
+      return of();
     }
 
     if (!this.pendingMessagesToProcess) {
       this.pendingMessagesToProcess = newMessagesToProcess;
-    } else {
-      this.pendingMessagesToProcess = this.pendingMessagesToProcess.concat(newMessagesToProcess);
-    }
-
-    return new Observable(observer => {
-      // Test for indexing on main thread
+      this.messageProcessingInProgressSubject = new AsyncSubject();
 
       const indexingTools = new IndexingTools(this.api);
       const getProgressSnackBarMessageText = () => `Syncing ${this.processMessageIndex} / ${this.pendingMessagesToProcess.length}`;
@@ -498,9 +491,10 @@ export class SearchService {
       }
 
       const processMessage = () => {
-        if (!this.localSearchActivated || !this.pendingMessagesToProcess) {
+        if (!this.localSearchActivated) {
           // Handle that index is deleted in the middle of an indexing process
-          observer.next();
+          this.messageProcessingInProgressSubject.error('Search index deleted in the middle of indexing process');
+          return;
         } else if (this.processMessageIndex < this.pendingMessagesToProcess.length) {
           this.processMessageHistoryProgress = Math.round(this.processMessageIndex * 100 / this.pendingMessagesToProcess.length);
 
@@ -541,29 +535,44 @@ export class SearchService {
           this.pendingMessagesToProcess = null;
           this.processMessageIndex = 0;
 
-          // this.searchResultsSubject.next();
-          observer.next();
+          this.messageProcessingInProgressSubject.next(true);
+          this.messageProcessingInProgressSubject.complete();
+          this.messageProcessingInProgressSubject = null;
+
+          this.persistIndex();
         }
       };
-      processMessage();
-    });
+      if (this.persistIndexInProgressSubject) {
+        // Wait for persistence of index to finish before doing more work on the index
+        this.persistIndexInProgressSubject.subscribe(() => processMessage());
+      } else {
+        processMessage();
+      }
+    } else {
+      this.pendingMessagesToProcess = this.pendingMessagesToProcess.concat(newMessagesToProcess);
+    }
+    return this.messageProcessingInProgressSubject;
+
   }
 
   persistIndex(): Observable<boolean> {
-    if (this.persistIndexInProgress || !this.localSearchActivated) {
-      return new Observable(o => o.next(true));
+    if ( !this.localSearchActivated) {
+      return of(false);
     } else {
-      this.persistIndexInProgress = true;
+      if (!this.persistIndexInProgressSubject) {
+        this.persistIndexInProgressSubject = new AsyncSubject();
 
-      console.log('Persisting to indexeddb');
-      return new Observable(observer => {
+        console.log('Persisting to indexeddb');
+
         FS.writeFile('indexLastUpdateTime', '' + this.indexLastUpdateTime, { encoding: 'utf8' });
         FS.syncfs(false, () => {
-            this.persistIndexInProgress = false;
-            observer.next(true);
+            this.persistIndexInProgressSubject.next(true);
+            this.persistIndexInProgressSubject.complete();
+            this.persistIndexInProgressSubject = null;
             console.log('Done persisting to indexeddb');
         });
-      });
+      }
+      return this.persistIndexInProgressSubject;
     }
   }
 

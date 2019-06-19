@@ -59,10 +59,18 @@ export class SearchIndexDocumentData {
   attachment?: boolean;
 }
 
+export class SearchIndexDocumentUpdate {
+  constructor(
+    public id: number,
+    public updateFunction: () => void
+  ) {}
+}
+
 @Injectable()
 export class SearchService {
 
   public api: XapianAPI;
+  public indexingTools: IndexingTools;
 
   public initSubject: AsyncSubject<any> = new AsyncSubject();
   public noLocalIndexFoundSubject: AsyncSubject<any> = new AsyncSubject();
@@ -122,7 +130,7 @@ export class SearchService {
   pendingIndexVerifications: {[id: string]: any} = {};
 
   messageProcessingInProgressSubject: AsyncSubject<any> = null;
-  pendingMessagesToProcess: (MessageInfo | MessageFlagChange)[];
+  pendingMessagesToProcess: SearchIndexDocumentUpdate[];
   processMessageIndex = 0;
 
   /**
@@ -201,7 +209,22 @@ export class SearchService {
     // Update locally generated index with message seen flag
     this.rmmapi.messageFlagChangeSubject
       .pipe(
-        mergeMap((msgFlagChange) => this.postMessagesToXapianWorker([msgFlagChange])),
+        mergeMap((msgFlagChange) => {
+          if (msgFlagChange.flaggedFlag !== null) {
+            return this.postMessagesToXapianWorker([new SearchIndexDocumentUpdate(
+              msgFlagChange.id,
+                () => this.indexingTools.flagMessage(msgFlagChange.id, msgFlagChange.flaggedFlag)
+            )]);
+          } else if (msgFlagChange.seenFlag !== null) {
+            return this.postMessagesToXapianWorker([
+              new SearchIndexDocumentUpdate(
+              msgFlagChange.id,
+              () => this.indexingTools.flagMessage(msgFlagChange.id, msgFlagChange.seenFlag)
+            )]);
+          } else {
+            throw new Error('Empty flag change message' + JSON.stringify(msgFlagChange));
+          }
+        }),
         tap(() => {
           this.searchResultsSubject.next();
         }),
@@ -216,6 +239,7 @@ export class SearchService {
       this.workerStatusMessage.next('Checking if local search index exists');
       const initXapianFileSys = () => {
         this.api =  new XapianAPI();
+        this.indexingTools = new IndexingTools(this.api);
 
         FS.mkdir(this.localdir);
         FS.mount(IDBFS, {}, '/' + this.localdir);
@@ -473,7 +497,7 @@ export class SearchService {
       })));
   }
 
-  postMessagesToXapianWorker(newMessagesToProcess: (MessageInfo | MessageFlagChange)[]): Observable<any> {
+  postMessagesToXapianWorker(newMessagesToProcess: SearchIndexDocumentUpdate[]): Observable<any> {
     if (!this.localSearchActivated) {
       return of();
     }
@@ -482,7 +506,6 @@ export class SearchService {
       this.pendingMessagesToProcess = newMessagesToProcess;
       this.messageProcessingInProgressSubject = new AsyncSubject();
 
-      const indexingTools = new IndexingTools(this.api);
       const getProgressSnackBarMessageText = () => `Syncing ${this.processMessageIndex} / ${this.pendingMessagesToProcess.length}`;
       let progressSnackBar: MatSnackBarRef<SyncProgressComponent>;
       if (this.pendingMessagesToProcess.length > 10) {
@@ -506,21 +529,7 @@ export class SearchService {
           this.rmmapi.deleteFromMessageContentsCache(this.pendingMessagesToProcess[this.processMessageIndex].id);
 
           const nextMessage = this.pendingMessagesToProcess[this.processMessageIndex++];
-          if (nextMessage instanceof MessageInfo) {
-            indexingTools.addMessageToIndex(nextMessage, [
-              this.messagelistservice.spamFolderName,
-              this.messagelistservice.trashFolderName
-            ]);
-          } else if (nextMessage instanceof MessageFlagChange) {
-            if (nextMessage.flaggedFlag !== null) {
-                indexingTools.flagMessage(nextMessage.id, nextMessage.flaggedFlag);
-            }
-            if (nextMessage.seenFlag !== null) {
-              indexingTools.markMessageSeen(nextMessage.id, nextMessage.seenFlag);
-            }
-          } else {
-            console.error('unsupported message type ( should not happen )', nextMessage);
-          }
+          nextMessage.updateFunction();
 
           // Notify about changes in the index (for canvas table to update)
           setTimeout(() => processMessage(), 1);
@@ -727,7 +736,14 @@ export class SearchService {
         this.indexLastUpdateTime = unprocessed[unprocessed.length - 1].changedDate ?
             unprocessed[unprocessed.length - 1].changedDate.getTime() :
             unprocessed[unprocessed.length - 1].messageDate.getTime();
-        return this.postMessagesToXapianWorker(unprocessed)
+        return this.postMessagesToXapianWorker(
+            unprocessed.map(msginfo => new SearchIndexDocumentUpdate(msginfo.id, () => {
+              this.indexingTools.addMessageToIndex(msginfo, [
+                this.messagelistservice.spamFolderName,
+                this.messagelistservice.trashFolderName
+              ]);
+            }))
+          )
                 .pipe(
                   map(() => unprocessed)
                 );

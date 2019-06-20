@@ -399,20 +399,21 @@ export class RunboxWebmailAPI {
     }
 
     public markSeen(messageId: any, seen_flag_value = 1): Observable<any> {
-        return this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ seen_flag: seen_flag_value }))
-        .pipe(
-            tap((msgInfo) => this.messageFlagChangeSubject.next(
+        return of(null).pipe(
+            tap(() => this.messageFlagChangeSubject.next(
                 new MessageFlagChange(messageId, seen_flag_value === 1 ? true : false, null)
-            ))
-        );
+            )),
+            mergeMap(() => this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ seen_flag: seen_flag_value }))
+        ));
     }
 
     public markFlagged(messageId: any, flagged_flag_value = 1): Observable<any> {
-        return this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ flagged_flag: flagged_flag_value }))
+        return of(null)
             .pipe(
                 tap((msgInfo) => this.messageFlagChangeSubject.next(
                     new MessageFlagChange(messageId, null, flagged_flag_value === 1 ? true : false)
-                ))
+                )),
+                mergeMap(() => this.http.put('/rest/v1/email/' + messageId, JSON.stringify({ flagged_flag: flagged_flag_value })))
             );
     }
 

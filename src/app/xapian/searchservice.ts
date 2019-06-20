@@ -220,15 +220,11 @@ export class SearchService {
             return this.postMessagesToXapianWorker([
               new SearchIndexDocumentUpdate(
               msgFlagChange.id,
-              () => this.indexingTools.flagMessage(msgFlagChange.id, msgFlagChange.seenFlag)
+              () => this.indexingTools.markMessageSeen(msgFlagChange.id, msgFlagChange.seenFlag)
             )]);
           } else {
-            throw new Error('Empty flag change message' + JSON.stringify(msgFlagChange));
+            console.error('Empty flag change message', msgFlagChange);
           }
-        }),
-        catchError(e => {
-          console.error(e);
-          return of(null);
         })
       )
       .subscribe();

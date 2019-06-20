@@ -145,18 +145,26 @@ export class IndexingTools {
     }
 
     public markMessageSeen(messageId: number, seenFlag: boolean) {
-        if (seenFlag === true) {
-            this.indexAPI.addTermToDocument(`Q${messageId}`, 'XFseen');
-        } else if (seenFlag === false) {
-            this.indexAPI.removeTermFromDocument(`Q${messageId}`, 'XFseen');
+        try {
+            if (seenFlag === true) {
+                this.indexAPI.addTermToDocument(`Q${messageId}`, 'XFseen');
+            } else if (seenFlag === false) {
+                this.indexAPI.removeTermFromDocument(`Q${messageId}`, 'XFseen');
+            }
+        } catch (e) {
+            console.error(e);
         }
     }
 
     public flagMessage(messageId: number, flag: boolean) {
-        if (flag === true) {
-            this.indexAPI.addTermToDocument(`Q${messageId}`, 'XFflagged');
-        } else if (flag === false) {
-            this.indexAPI.removeTermFromDocument(`Q${messageId}`, 'XFflagged');
+        try {
+            if (flag === true) {
+                this.indexAPI.addTermToDocument(`Q${messageId}`, 'XFflagged');
+            } else if (flag === false) {
+                this.indexAPI.removeTermFromDocument(`Q${messageId}`, 'XFflagged');
+            }
+        } catch (e) {
+            console.error(e);
         }
     }
 

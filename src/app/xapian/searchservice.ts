@@ -117,6 +117,7 @@ export class SearchService {
   partitionDownloadProgress: number = null;
 
   persistIndexInProgressSubject: AsyncSubject<any> = null;
+  indexNotPersisted = false;
 
   /**
    * Keep track of earlier change polls so that we don't reindex what we've already processed
@@ -224,9 +225,6 @@ export class SearchService {
           } else {
             throw new Error('Empty flag change message' + JSON.stringify(msgFlagChange));
           }
-        }),
-        tap(() => {
-          this.searchResultsSubject.next();
         }),
         catchError(e => {
           console.error(e);
@@ -531,8 +529,12 @@ export class SearchService {
           const nextMessage = this.pendingMessagesToProcess[this.processMessageIndex++];
           nextMessage.updateFunction();
 
-          // Notify about changes in the index (for canvas table to update)
-          setTimeout(() => processMessage(), 1);
+          if (this.persistIndexInProgressSubject) {
+            // Wait for persistence of index to finish before doing more work on the index
+            this.persistIndexInProgressSubject.subscribe(() => processMessage());
+          } else {
+            setTimeout(() => processMessage(), 1);
+          }
         } else {
           console.log('All messages added');
           this.api.commitXapianUpdates();
@@ -542,13 +544,16 @@ export class SearchService {
           }
           this.processMessageHistoryProgress = null;
           this.pendingMessagesToProcess = null;
-          this.processMessageIndex = 0;
+          if (this.processMessageIndex > 0) {
+            this.processMessageIndex = 0;
+            this.indexNotPersisted = true;
+          }
 
           this.messageProcessingInProgressSubject.next(true);
           this.messageProcessingInProgressSubject.complete();
           this.messageProcessingInProgressSubject = null;
 
-          this.persistIndex();
+          this.searchResultsSubject.next();
         }
       };
       if (this.persistIndexInProgressSubject) {
@@ -565,7 +570,7 @@ export class SearchService {
   }
 
   persistIndex(): Observable<boolean> {
-    if ( !this.localSearchActivated) {
+    if (!this.indexNotPersisted || !this.localSearchActivated) {
       return of(false);
     } else {
       if (!this.persistIndexInProgressSubject) {
@@ -578,6 +583,7 @@ export class SearchService {
             this.persistIndexInProgressSubject.next(true);
             this.persistIndexInProgressSubject.complete();
             this.persistIndexInProgressSubject = null;
+            this.indexNotPersisted = false;
             console.log('Done persisting to indexeddb');
         });
       }
@@ -651,8 +657,10 @@ export class SearchService {
   /**
    * Polling loop (every 10th sec)
    */
-  updateIndexWithNewChanges() {
+  async updateIndexWithNewChanges() {
     clearTimeout(this.indexUpdateIntervalId);
+
+    await this.persistIndex().toPromise();
 
     console.log('Getting latest messages from server after', new Date(this.indexLastUpdateTime));
 

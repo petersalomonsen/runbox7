@@ -609,6 +609,7 @@ export class SearchService {
    */
   moveMessagesToFolder(messageIds: number[], destinationfolderPath: string) {
     this.messagelistservice.folderCountSubject
+      .pipe(take(1))
       .subscribe((folders) => {
         const destinationFolder = folders.find(folder => folder.folderPath === destinationfolderPath);
 
@@ -720,6 +721,8 @@ export class SearchService {
           }
         });
 
+        const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+
         msginfos.forEach(msginfo => {
             const uniqueIdTerm = `Q${msginfo.id}`;
             const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
@@ -765,7 +768,12 @@ export class SearchService {
                 if (term.indexOf(XAPIAN_TERM_FOLDER) === 0 &&
                   term.substr(XAPIAN_TERM_FOLDER.length) !== msginfo.folder) {
                     // Folder changed
-                    addSearchIndexDocumentUpdate(() => this.api.changeDocumentsFolder(uniqueIdTerm, msginfo.folder));
+                    const destinationFolder = folders.find(folder => folder.folderPath === msginfo.folder);
+                    if (destinationFolder.folderType === 'spam' || destinationFolder.folderType === 'trash') {
+                      addSearchIndexDocumentUpdate(() => this.api.deleteDocumentByUniqueTerm(uniqueIdTerm));
+                    } else {
+                      addSearchIndexDocumentUpdate(() => this.api.changeDocumentsFolder(uniqueIdTerm, msginfo.folder));
+                    }
                 } else if (term === XAPIAN_TERM_FLAGGED) {
                   messageStatusInIndex.flagged = true;
                 } else if (term === XAPIAN_TERM_SEEN) {

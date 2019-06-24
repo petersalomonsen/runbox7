@@ -735,13 +735,16 @@ export class SearchService {
 
         return this.postMessagesToXapianWorker(
             messagesToBeIndexed.map(msginfo => new SearchIndexDocumentUpdate(msginfo.id, async () => {
-                const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
-                msginfo.plaintext = messageContents.text.text;
-                console.log('new message', msginfo);
-                this.indexingTools.addMessageToIndex(msginfo, [
-                  this.messagelistservice.spamFolderName,
-                  this.messagelistservice.trashFolderName
-                ]);
+                try {
+                  const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
+                  msginfo.plaintext = messageContents.text.text;
+                  this.indexingTools.addMessageToIndex(msginfo, [
+                    this.messagelistservice.spamFolderName,
+                    this.messagelistservice.trashFolderName
+                  ]);
+                } catch (e) {
+                  console.error('failed to add message to index', msginfo, e);
+                }
               }))
           ).pipe(
             map(() => messagesToBeIndexed)

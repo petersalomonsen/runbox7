@@ -214,10 +214,12 @@ export class RunboxWebmailAPI {
             this.http.get('/rest/v1/email/' + messageId)
             .pipe(
                 map((r: any) => r.result),
-
             ).subscribe((r) => {
                 messageContentsObservable.next(r);
                 messageContentsObservable.complete();
+            }, err => {
+                delete this.messageContentsCache[messageId];
+                messageContentsObservable.error(err);
             });
 
             return messageContentsObservable;

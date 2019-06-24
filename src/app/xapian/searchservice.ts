@@ -610,8 +610,12 @@ export class SearchService {
         if (destinationFolder.folderType === 'spam' || destinationFolder.folderType === 'trash') {
           this.postMessagesToXapianWorker(messageIds.map(mid =>
               new SearchIndexDocumentUpdate(mid, () => {
-                this.api.deleteDocumentByUniqueTerm('Q' + mid);
-                console.log('Deleted msg id search index', mid);
+                try {
+                  this.api.deleteDocumentByUniqueTerm('Q' + mid);
+                  console.log('Deleted msg id search index', mid);
+                } catch (e) {
+                  console.error('Unable to delete message from search index (not found?)', mid);
+                }
               })
             )
           );
@@ -619,7 +623,12 @@ export class SearchService {
           const dotSeparatedDestinationfolderPath = destinationfolderPath.replace(/\//g, '.');
           this.postMessagesToXapianWorker(messageIds.map(mid =>
               new SearchIndexDocumentUpdate(mid, () => {
-                this.api.changeDocumentsFolder('Q' + mid, dotSeparatedDestinationfolderPath);
+                try {
+                  this.api.changeDocumentsFolder('Q' + mid, dotSeparatedDestinationfolderPath);
+                } catch (e) {
+                  console.error('Unable to change index document folder', mid, dotSeparatedDestinationfolderPath,
+                    '(not found since moving from trash/spam folder?');
+                }
               })
             )
           );

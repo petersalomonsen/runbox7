@@ -312,7 +312,8 @@ export class AppComponent implements OnInit, AfterViewInit, CanvasTableSelectLis
             mergeMap(o =>
               o.pipe(
                 mergeMap(messageId => this.rmmapi.getMessageContents(messageId)),
-                take(1)
+                take(1),
+                tap(() => this.canvastable.hasChanges = true)
               ), 1),
             bufferCount(rowIndexes.length)
           )

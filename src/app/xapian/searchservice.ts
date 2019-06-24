@@ -920,10 +920,12 @@ export class SearchService {
             textcontent: null
           };
 
-          this.rmmapi.getMessageContents(parseInt(this.currentDocData.id.substring(1), 10))
-            .subscribe(contentobj => {
-              this.currentDocData.textcontent = contentobj.text.text;
-            });
+          const rmmMessageId = parseInt(this.currentDocData.id.substring(1), 10);
+          const rmmCachedMessageContent = this.rmmapi.messageContentsCache[rmmMessageId];
+          if (rmmCachedMessageContent) {
+            rmmCachedMessageContent.subscribe(content =>
+              this.currentDocData.textcontent = content.text.text);
+          }
 
           this.api.documentXTermList(docid);
             (Module.documenttermlistresult as string[])

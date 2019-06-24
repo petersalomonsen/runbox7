@@ -120,11 +120,6 @@ export class SearchService {
   indexNotPersisted = false;
 
   /**
-   * Keep track of earlier change polls so that we don't reindex what we've already processed
-   */
-  pollCache: {[id: number]: MessageInfo} = {};
-
-  /**
    * Extra per message verification of index contents to assure that it is in sync with the database
    * (workaround while waiting for deleted_messages support, but also a good extra check)
    */
@@ -437,7 +432,6 @@ export class SearchService {
         if (!res) {
           this.api.initXapianIndex(XAPIAN_GLASS_WR);
           this.localSearchActivated = true;
-          this.pollCache = {};
           this.indexLastUpdateTime = 0;
           this.updateIndexWithNewChanges();
           observer.next(true);
@@ -481,7 +475,6 @@ export class SearchService {
             this.api.initXapianIndex(XAPIAN_GLASS_WR);
             console.log(this.api.getXapianDocCount() + ' docs in Xapian database');
             this.localSearchActivated = true;
-            this.pollCache = {};
             this.updateFolderInfo();
             this.updateIndexLastUpdateTime();
             progressSubscription.unsubscribe();
@@ -507,7 +500,7 @@ export class SearchService {
         progressSnackBar.instance.messagetextsubject.next(getProgressSnackBarMessageText());
       }
 
-      const processMessage = () => {
+      const processMessage = async () => {
         if (!this.localSearchActivated) {
           // Handle that index is deleted in the middle of an indexing process
           this.messageProcessingInProgressSubject.error('Search index deleted in the middle of indexing process');
@@ -523,14 +516,14 @@ export class SearchService {
           this.rmmapi.deleteFromMessageContentsCache(this.pendingMessagesToProcess[this.processMessageIndex].id);
 
           const nextMessage = this.pendingMessagesToProcess[this.processMessageIndex++];
-          nextMessage.updateFunction();
+          await nextMessage.updateFunction();
 
           if (this.persistIndexInProgressSubject) {
             // Wait for persistence of index to finish before doing more work on the index
-            this.persistIndexInProgressSubject.subscribe(() => processMessage());
-          } else {
-            setTimeout(() => processMessage(), 1);
+            await this.persistIndexInProgressSubject.toPromise();
           }
+          setTimeout(() => processMessage(), 1);
+
         } else {
           console.log('All messages added');
           this.api.commitXapianUpdates();
@@ -686,7 +679,7 @@ export class SearchService {
       mergeMap(() =>
         this.rmmapi.listAllMessages(0, 0, this.indexLastUpdateTime,
           RunboxWebmailAPI.LIST_ALL_MESSAGES_CHUNK_SIZE,
-          !this.localSearchActivated // Skip getting content if we are not using local search
+          true
         )
       ),
       // Concat deleted messages
@@ -698,31 +691,24 @@ export class SearchService {
           .pipe(map(deletedMessages => messages.concat(deletedMessages)))
       ),
       mergeMap(msginfos => {
-        const unprocessed = msginfos
-          .filter(msginfo =>
-            this.pollCache[msginfo.id] === undefined ||
-            !this.pollCache[msginfo.id].changedDate && msginfo.changedDate ||
-            this.pollCache[msginfo.id].changedDate && !msginfo.changedDate ||
-            (
-              this.pollCache[msginfo.id].changedDate &&
-              msginfo.changedDate &&
-              this.pollCache[msginfo.id].changedDate.getTime() !==
-              msginfo.changedDate.getTime()
-            )
+        const messagesToBeIndexed = msginfos.filter(msginfo =>
+            msginfo.folder !== this.messagelistservice.spamFolderName &&
+            msginfo.folder !== this.messagelistservice.trashFolderName &&
+            !this.api.hasMessageId(msginfo.id)
           );
 
-        if (unprocessed.length === 0) {
+        if (messagesToBeIndexed.length === 0) {
           this.workerStatusMessage.next(null);
           console.log('No changes');
 
           this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
           this.notifyOnNewMessages = true;
-          return of(unprocessed);
+          return of(messagesToBeIndexed);
         }
 
         if (this.notifyOnNewMessages && 'Notification' in window &&
             window['Notification']['permission'] === 'granted') {
-          const newmessages = unprocessed.filter(m =>
+          const newmessages = messagesToBeIndexed.filter(m =>
               !m.seenFlag &&
               m.folder === 'Inbox' &&
               m.messageDate.getTime() > this.indexLastUpdateTime);
@@ -743,27 +729,29 @@ export class SearchService {
           }
         }
 
-        this.indexLastUpdateTime = unprocessed[unprocessed.length - 1].changedDate ?
-            unprocessed[unprocessed.length - 1].changedDate.getTime() :
-            unprocessed[unprocessed.length - 1].messageDate.getTime();
+        this.indexLastUpdateTime = msginfos[msginfos.length - 1].changedDate ?
+            msginfos[msginfos.length - 1].changedDate.getTime() :
+            msginfos[msginfos.length - 1].messageDate.getTime();
+
         return this.postMessagesToXapianWorker(
-            unprocessed.map(msginfo => new SearchIndexDocumentUpdate(msginfo.id, () => {
-              this.indexingTools.addMessageToIndex(msginfo, [
-                this.messagelistservice.spamFolderName,
-                this.messagelistservice.trashFolderName
-              ]);
-            }))
-          )
-                .pipe(
-                  map(() => unprocessed)
-                );
+            messagesToBeIndexed.map(msginfo => new SearchIndexDocumentUpdate(msginfo.id, async () => {
+                const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
+                msginfo.plaintext = messageContents.text.text;
+                console.log('new message', msginfo);
+                this.indexingTools.addMessageToIndex(msginfo, [
+                  this.messagelistservice.spamFolderName,
+                  this.messagelistservice.trashFolderName
+                ]);
+              }))
+          ).pipe(
+            map(() => messagesToBeIndexed)
+          );
         }
       ), catchError((err) => {
         console.log('Other error', err);
         return of([] as MessageInfo[]);
       })).subscribe((unprocessed) => {
           this.messagelistservice.applyChanges(unprocessed);
-          unprocessed.forEach(msginfo => this.pollCache[msginfo.id] = msginfo);
           this.notifyOnNewMessages = true;
           this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
       });

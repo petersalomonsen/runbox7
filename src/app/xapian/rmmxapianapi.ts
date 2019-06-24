@@ -18,7 +18,6 @@
 // ---------- END RUNBOX LICENSE ----------
 
 declare var Module;
-declare var termlistresult;
 
 const emAllocateString = function (str) {
   if (!str) {
@@ -252,9 +251,9 @@ export class XapianAPI {
   }
 
   hasMessageId(id: number): boolean {
-    termlistresult = [];
+    window['termlistresult'] = [];
     this.termlist('Q' + id);
-    return termlistresult.findIndex(t => t === '') > -1;
+    return window['termlistresult'].findIndex(t => t === '') > -1;
   }
 }
 

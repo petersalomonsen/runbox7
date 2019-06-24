@@ -62,6 +62,8 @@ export class XapianAPI {
         Module.cwrap('removeTermFromDocument', null, ['string', 'string']);
   public addTextToDocument: (idterm: string, withoutpositions: boolean, text: string) => void =
         Module.cwrap('addTextToDocument', null, ['string', 'boolean', 'string']);
+  public getDocIdFromUniqueIdTerm: (idterm: string) => number =
+        Module.cwrap('getDocIdFromUniqueIdTerm', 'number', ['string']);
 
   public getStringValue(docid, slot): string {
     const $ret = Module._malloc(1024);

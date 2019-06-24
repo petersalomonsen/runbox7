@@ -44,6 +44,11 @@ declare var FS;
 declare var IDBFS;
 declare var Module;
 
+const XAPIAN_TERM_FOLDER = 'XFOLDER:';
+const XAPIAN_TERM_FLAGGED = 'XFflagged';
+const XAPIAN_TERM_SEEN = 'XFseen';
+const XAPIAN_TERM_ANSWERED = 'XFanswered';
+
 export const XAPIAN_GLASS_WR = 'xapianglasswr';
 
 export class SearchIndexDocumentData {
@@ -700,24 +705,101 @@ export class SearchService {
           .pipe(map(deletedMessages => messages.concat(deletedMessages)))
       ),
       mergeMap(msginfos => {
-        const messagesToBeIndexed = msginfos.filter(msginfo =>
-            msginfo.folder !== this.messagelistservice.spamFolderName &&
-            msginfo.folder !== this.messagelistservice.trashFolderName &&
-            !this.api.hasMessageId(msginfo.id)
-          );
+        const searchIndexDocumentUpdates: SearchIndexDocumentUpdate[] = [];
 
-        if (messagesToBeIndexed.length === 0) {
+        msginfos.forEach(msginfo => {
+            const uniqueIdTerm = `Q${msginfo.id}`;
+            const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
+            if (
+              docid === 0 && // document not found in the index
+              msginfo.folder !== this.messagelistservice.spamFolderName &&
+              msginfo.folder !== this.messagelistservice.trashFolderName
+            ) {
+              searchIndexDocumentUpdates.push(
+                new SearchIndexDocumentUpdate(msginfo.id, async () => {
+                  try {
+                    const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
+                    msginfo.plaintext = messageContents.text.text;
+                    this.indexingTools.addMessageToIndex(msginfo, [
+                      this.messagelistservice.spamFolderName,
+                      this.messagelistservice.trashFolderName
+                    ]);
+                  } catch (e) {
+                    console.error('failed to add message to index', msginfo, e);
+                  }
+                })
+              );
+            } else {
+              this.api.documentXTermList(docid);
+              const messageStatusInIndex = {
+                flagged: false,
+                seen: false,
+                answered: false
+              };
+              const documentTermList = (Module.documenttermlistresult as string[]);
+              const addSearchIndexDocumentUpdate = (func: () => void) =>
+                searchIndexDocumentUpdates.push(
+                  new SearchIndexDocumentUpdate(msginfo.id, async () => {
+                    try {
+                      func();
+                    } catch (err) {
+                      console.error('Error updating doc in searchindex', msginfo, documentTermList, err);
+                    }
+                  }
+                  )
+                );
+              documentTermList.forEach(term => {
+                if (term.indexOf(XAPIAN_TERM_FOLDER) === 0 &&
+                  term.substr(XAPIAN_TERM_FOLDER.length) !== msginfo.folder) {
+                    // Folder changed
+                    addSearchIndexDocumentUpdate(() => this.api.changeDocumentsFolder(uniqueIdTerm, msginfo.folder));
+                } else if (term === XAPIAN_TERM_FLAGGED) {
+                  messageStatusInIndex.flagged = true;
+                } else if (term === XAPIAN_TERM_SEEN) {
+                  messageStatusInIndex.seen = true;
+                } else if (term === XAPIAN_TERM_ANSWERED) {
+                  messageStatusInIndex.answered = true;
+                }
+              });
+
+              if (msginfo.answeredFlag && !messageStatusInIndex.answered) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
+              } else if (!msginfo.answeredFlag && messageStatusInIndex.answered) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
+              }
+
+              if (msginfo.flaggedFlag && !messageStatusInIndex.flagged) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
+              } else if (!msginfo.flaggedFlag && messageStatusInIndex.flagged) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
+              }
+
+              if (msginfo.seenFlag && !messageStatusInIndex.seen) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
+              } else if (!msginfo.seenFlag && messageStatusInIndex.seen) {
+                addSearchIndexDocumentUpdate(() =>
+                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
+              }
+            }
+          });
+
+        if (searchIndexDocumentUpdates.length === 0) {
           this.workerStatusMessage.next(null);
           console.log('No changes');
 
           this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
           this.notifyOnNewMessages = true;
-          return of(messagesToBeIndexed);
+          return of([]);
         }
 
         if (this.notifyOnNewMessages && 'Notification' in window &&
             window['Notification']['permission'] === 'granted') {
-          const newmessages = messagesToBeIndexed.filter(m =>
+          const newmessages = msginfos.filter(m =>
               !m.seenFlag &&
               m.folder === 'Inbox' &&
               m.messageDate.getTime() > this.indexLastUpdateTime);
@@ -742,21 +824,8 @@ export class SearchService {
             msginfos[msginfos.length - 1].changedDate.getTime() :
             msginfos[msginfos.length - 1].messageDate.getTime();
 
-        return this.postMessagesToXapianWorker(
-            messagesToBeIndexed.map(msginfo => new SearchIndexDocumentUpdate(msginfo.id, async () => {
-                try {
-                  const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
-                  msginfo.plaintext = messageContents.text.text;
-                  this.indexingTools.addMessageToIndex(msginfo, [
-                    this.messagelistservice.spamFolderName,
-                    this.messagelistservice.trashFolderName
-                  ]);
-                } catch (e) {
-                  console.error('failed to add message to index', msginfo, e);
-                }
-              }))
-          ).pipe(
-            map(() => messagesToBeIndexed)
+        return this.postMessagesToXapianWorker(searchIndexDocumentUpdates).pipe(
+            map(() => msginfos)
           );
         }
       ), catchError((err) => {
@@ -940,15 +1009,15 @@ export class SearchService {
           }
 
           this.api.documentXTermList(docid);
-            (Module.documenttermlistresult as string[])
+          (Module.documenttermlistresult as string[])
               .forEach(s => {
-                if (s.indexOf('XFOLDER:') === 0) {
-                  this.currentDocData.folder = s.substr('XFOLDER:'.length);
-                } else if (s === 'XFflagged') {
+                if (s.indexOf(XAPIAN_TERM_FOLDER) === 0) {
+                  this.currentDocData.folder = s.substr(XAPIAN_TERM_FOLDER.length);
+                } else if (s === XAPIAN_TERM_FLAGGED) {
                   this.currentDocData.flagged = true;
-                } else if (s === 'XFseen') {
+                } else if (s === XAPIAN_TERM_SEEN) {
                   this.currentDocData.seen = true;
-                } else if (s === 'XFanswered') {
+                } else if (s === XAPIAN_TERM_ANSWERED) {
                   this.currentDocData.answered = true;
                 } else if (s === 'XFattachment') {
                   this.currentDocData.attachment = true;

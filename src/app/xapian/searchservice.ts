@@ -696,16 +696,29 @@ export class SearchService {
           true
         )
       ),
-      // Concat deleted messages
-      mergeMap(messages =>
-        this.rmmapi.listDeletedMessagesSince(new Date(
-              // Subtract timezone offset to get UTC
-              this.indexLastUpdateTime - new Date().getTimezoneOffset() * 60 * 1000)
-            )
-          .pipe(map(deletedMessages => messages.concat(deletedMessages)))
-      ),
-      mergeMap(msginfos => {
+      mergeMap(async msginfos => {
         const searchIndexDocumentUpdates: SearchIndexDocumentUpdate[] = [];
+
+        const deletedMessages = await this.rmmapi.listDeletedMessagesSince(new Date(
+          // Subtract timezone offset to get UTC
+          this.indexLastUpdateTime - new Date().getTimezoneOffset() * 60 * 1000)
+        ).toPromise();
+
+        deletedMessages.forEach(msgid => {
+          const uniqueIdTerm = `Q${msgid}`;
+          const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
+          if (docid !== 0) {
+            searchIndexDocumentUpdates.push(
+              new SearchIndexDocumentUpdate(msgid, async () => {
+                try {
+                  this.api.deleteDocumentByUniqueTerm(uniqueIdTerm);
+                } catch (e) {
+                  console.error('Unable to delete message from index', msgid);
+                }
+              })
+            );
+          }
+        });
 
         msginfos.forEach(msginfo => {
             const uniqueIdTerm = `Q${msginfo.id}`;
@@ -729,7 +742,7 @@ export class SearchService {
                   }
                 })
               );
-            } else {
+            } else if (docid !== 0) {
               this.api.documentXTermList(docid);
               const messageStatusInIndex = {
                 flagged: false,
@@ -794,7 +807,7 @@ export class SearchService {
 
           this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
           this.notifyOnNewMessages = true;
-          return of([]);
+          return of(msginfos);
         }
 
         if (this.notifyOnNewMessages && 'Notification' in window &&
@@ -830,9 +843,8 @@ export class SearchService {
         }
       ), catchError((err) => {
         console.log('Other error', err);
-        return of([] as MessageInfo[]);
-      })).subscribe((unprocessed) => {
-          this.messagelistservice.applyChanges(unprocessed);
+        return of();
+      })).subscribe(() => {
           this.notifyOnNewMessages = true;
           this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
       });

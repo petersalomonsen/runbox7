@@ -234,18 +234,12 @@ export class RunboxWebmailAPI {
         delete this.messageContentsCache[messageId];
     }
 
-    public listDeletedMessagesSince(sincechangeddate: Date): Observable<MessageInfo[]> {
+    public listDeletedMessagesSince(sincechangeddate: Date): Observable<number[]> {
         const datestring = sincechangeddate.toJSON().replace('T', ' ').substr(0, 'yyyy-MM-dd HH:mm:ss'.length);
         const now = new Date();
         return this.http.get(`/rest/v1/list/deleted_messages/${datestring}`).pipe(
-            map((r: any) => (r.message_ids as number[]).map(
-                id => {
-                    const msg = new MessageInfo(id,
-                        now, now, '', false, false, false,
-                        [], [], [], [], '', '', 0, false);
-                    msg.deletedFlag = true;
-                    return msg;
-                })));
+            map((r: any) => (r.message_ids as number[]))
+        );
     }
 
     public listAllMessages(page: number,

@@ -116,8 +116,6 @@ export class SearchService {
   localdir: string;
   partitionsdir: string;
 
-  workerStatusMessage: BehaviorSubject<string> = new BehaviorSubject(null);
-
   initcalled = false;
   partitionDownloadProgress: number = null;
 
@@ -230,7 +228,6 @@ export class SearchService {
       .subscribe();
 
     xapianLoadedSubject.subscribe(() => {
-      this.workerStatusMessage.next('Checking if local search index exists');
       const initXapianFileSys = () => {
         this.api =  new XapianAPI();
         this.indexingTools = new IndexingTools(this.api);
@@ -683,140 +680,141 @@ export class SearchService {
 
     this.pendingIndexVerifications = {};
 
-    const verifyObservable = pendingIndexVerificationsArray.length > 0 ?
-      this.httpclient.post('/rest/v1/searchindex/verifymessages',
+    if (pendingIndexVerificationsArray.length > 0) {
+      await this.httpclient.post('/rest/v1/searchindex/verifymessages',
           {
             indexEntriesToVerify: pendingIndexVerificationsArray
           }
-      ) : of(true);
+      ).toPromise();
+    }
 
-    verifyObservable.pipe(
-      mergeMap(() =>
-        this.rmmapi.listAllMessages(0, 0, this.indexLastUpdateTime,
+    const msginfos = await this.rmmapi.listAllMessages(0, 0, this.indexLastUpdateTime,
           RunboxWebmailAPI.LIST_ALL_MESSAGES_CHUNK_SIZE,
-          true
-        )
-      ),
-      mergeMap(async msginfos => {
-        const searchIndexDocumentUpdates: SearchIndexDocumentUpdate[] = [];
+          true).toPromise();
 
-        const deletedMessages = await this.rmmapi.listDeletedMessagesSince(new Date(
-          // Subtract timezone offset to get UTC
-          this.indexLastUpdateTime - new Date().getTimezoneOffset() * 60 * 1000)
-        ).toPromise();
+    if (this.localSearchActivated) {
+      const searchIndexDocumentUpdates: SearchIndexDocumentUpdate[] = [];
 
-        deletedMessages.forEach(msgid => {
-          const uniqueIdTerm = `Q${msgid}`;
+      const deletedMessages = await this.rmmapi.listDeletedMessagesSince(new Date(
+            // Subtract timezone offset to get UTC
+            this.indexLastUpdateTime - new Date().getTimezoneOffset() * 60 * 1000)
+          ).toPromise();
+
+      deletedMessages.forEach(msgid => {
+        const uniqueIdTerm = `Q${msgid}`;
+        const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
+        if (docid !== 0) {
+          searchIndexDocumentUpdates.push(
+            new SearchIndexDocumentUpdate(msgid, async () => {
+              try {
+                this.api.deleteDocumentByUniqueTerm(uniqueIdTerm);
+              } catch (e) {
+                console.error('Unable to delete message from index', msgid);
+              }
+            })
+          );
+        }
+      });
+
+      const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+
+      msginfos.forEach(msginfo => {
+          const uniqueIdTerm = `Q${msginfo.id}`;
           const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
-          if (docid !== 0) {
+          if (
+            docid === 0 && // document not found in the index
+            msginfo.folder !== this.messagelistservice.spamFolderName &&
+            msginfo.folder !== this.messagelistservice.trashFolderName
+          ) {
             searchIndexDocumentUpdates.push(
-              new SearchIndexDocumentUpdate(msgid, async () => {
+              new SearchIndexDocumentUpdate(msginfo.id, async () => {
                 try {
-                  this.api.deleteDocumentByUniqueTerm(uniqueIdTerm);
+                  const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
+                  msginfo.plaintext = messageContents.text.text;
+                  this.indexingTools.addMessageToIndex(msginfo, [
+                    this.messagelistservice.spamFolderName,
+                    this.messagelistservice.trashFolderName
+                  ]);
                 } catch (e) {
-                  console.error('Unable to delete message from index', msgid);
+                  console.error('failed to add message to index', msginfo, e);
                 }
               })
             );
-          }
-        });
-
-        const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
-
-        msginfos.forEach(msginfo => {
-            const uniqueIdTerm = `Q${msginfo.id}`;
-            const docid = this.api.getDocIdFromUniqueIdTerm(uniqueIdTerm);
-            if (
-              docid === 0 && // document not found in the index
-              msginfo.folder !== this.messagelistservice.spamFolderName &&
-              msginfo.folder !== this.messagelistservice.trashFolderName
-            ) {
+          } else if (docid !== 0) {
+            this.api.documentXTermList(docid);
+            const messageStatusInIndex = {
+              flagged: false,
+              seen: false,
+              answered: false
+            };
+            const documentTermList = (Module.documenttermlistresult as string[]);
+            const addSearchIndexDocumentUpdate = (func: () => void) =>
               searchIndexDocumentUpdates.push(
                 new SearchIndexDocumentUpdate(msginfo.id, async () => {
                   try {
-                    const messageContents = await this.rmmapi.getMessageContents(msginfo.id).toPromise();
-                    msginfo.plaintext = messageContents.text.text;
-                    this.indexingTools.addMessageToIndex(msginfo, [
-                      this.messagelistservice.spamFolderName,
-                      this.messagelistservice.trashFolderName
-                    ]);
-                  } catch (e) {
-                    console.error('failed to add message to index', msginfo, e);
+                    func();
+                  } catch (err) {
+                    console.error('Error updating doc in searchindex', msginfo, documentTermList, err);
                   }
-                })
-              );
-            } else if (docid !== 0) {
-              this.api.documentXTermList(docid);
-              const messageStatusInIndex = {
-                flagged: false,
-                seen: false,
-                answered: false
-              };
-              const documentTermList = (Module.documenttermlistresult as string[]);
-              const addSearchIndexDocumentUpdate = (func: () => void) =>
-                searchIndexDocumentUpdates.push(
-                  new SearchIndexDocumentUpdate(msginfo.id, async () => {
-                    try {
-                      func();
-                    } catch (err) {
-                      console.error('Error updating doc in searchindex', msginfo, documentTermList, err);
-                    }
-                  }
-                  )
-                );
-              documentTermList.forEach(term => {
-                if (term.indexOf(XAPIAN_TERM_FOLDER) === 0 &&
-                  term.substr(XAPIAN_TERM_FOLDER.length) !== msginfo.folder) {
-                    // Folder changed
-                    const destinationFolder = folders.find(folder => folder.folderPath === msginfo.folder);
-                    if (destinationFolder.folderType === 'spam' || destinationFolder.folderType === 'trash') {
-                      addSearchIndexDocumentUpdate(() => this.api.deleteDocumentByUniqueTerm(uniqueIdTerm));
-                    } else {
-                      addSearchIndexDocumentUpdate(() => this.api.changeDocumentsFolder(uniqueIdTerm, msginfo.folder));
-                    }
-                } else if (term === XAPIAN_TERM_FLAGGED) {
-                  messageStatusInIndex.flagged = true;
-                } else if (term === XAPIAN_TERM_SEEN) {
-                  messageStatusInIndex.seen = true;
-                } else if (term === XAPIAN_TERM_ANSWERED) {
-                  messageStatusInIndex.answered = true;
                 }
-              });
-
-              if (msginfo.answeredFlag && !messageStatusInIndex.answered) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
-              } else if (!msginfo.answeredFlag && messageStatusInIndex.answered) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
+                )
+              );
+            documentTermList.forEach(term => {
+              if (term.indexOf(XAPIAN_TERM_FOLDER) === 0 &&
+                term.substr(XAPIAN_TERM_FOLDER.length) !== msginfo.folder) {
+                  // Folder changed
+                  const destinationFolder = folders.find(folder => folder.folderPath === msginfo.folder);
+                  if (destinationFolder.folderType === 'spam' || destinationFolder.folderType === 'trash') {
+                    addSearchIndexDocumentUpdate(() => this.api.deleteDocumentByUniqueTerm(uniqueIdTerm));
+                  } else {
+                    addSearchIndexDocumentUpdate(() => this.api.changeDocumentsFolder(uniqueIdTerm, msginfo.folder));
+                  }
+              } else if (term === XAPIAN_TERM_FLAGGED) {
+                messageStatusInIndex.flagged = true;
+              } else if (term === XAPIAN_TERM_SEEN) {
+                messageStatusInIndex.seen = true;
+              } else if (term === XAPIAN_TERM_ANSWERED) {
+                messageStatusInIndex.answered = true;
               }
+            });
 
-              if (msginfo.flaggedFlag && !messageStatusInIndex.flagged) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
-              } else if (!msginfo.flaggedFlag && messageStatusInIndex.flagged) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
-              }
-
-              if (msginfo.seenFlag && !messageStatusInIndex.seen) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
-              } else if (!msginfo.seenFlag && messageStatusInIndex.seen) {
-                addSearchIndexDocumentUpdate(() =>
-                  this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
-              }
+            if (msginfo.answeredFlag && !messageStatusInIndex.answered) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
+            } else if (!msginfo.answeredFlag && messageStatusInIndex.answered) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_ANSWERED));
             }
-          });
 
-        if (searchIndexDocumentUpdates.length === 0) {
-          this.workerStatusMessage.next(null);
-          console.log('No changes');
+            if (msginfo.flaggedFlag && !messageStatusInIndex.flagged) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
+            } else if (!msginfo.flaggedFlag && messageStatusInIndex.flagged) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_FLAGGED));
+            }
 
-          this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
-          this.notifyOnNewMessages = true;
-          return of(msginfos);
+            if (msginfo.seenFlag && !messageStatusInIndex.seen) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.addTermToDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
+            } else if (!msginfo.seenFlag && messageStatusInIndex.seen) {
+              addSearchIndexDocumentUpdate(() =>
+                this.api.removeTermFromDocument(uniqueIdTerm, XAPIAN_TERM_SEEN));
+            }
+          }
+        });
+
+        if (searchIndexDocumentUpdates.length > 0) {
+          await this.postMessagesToXapianWorker(searchIndexDocumentUpdates).toPromise();
         }
+      }
+
+      if (msginfos && msginfos.length > 0) {
+        this.indexLastUpdateTime = msginfos[msginfos.length - 1].changedDate ?
+        msginfos[msginfos.length - 1].changedDate.getTime() :
+        msginfos[msginfos.length - 1].messageDate.getTime();
+
+        this.messagelistservice.applyChanges(msginfos);
 
         if (this.notifyOnNewMessages && 'Notification' in window &&
             window['Notification']['permission'] === 'granted') {
@@ -840,22 +838,10 @@ export class SearchService {
             }
           }
         }
+      }
 
-        this.indexLastUpdateTime = msginfos[msginfos.length - 1].changedDate ?
-            msginfos[msginfos.length - 1].changedDate.getTime() :
-            msginfos[msginfos.length - 1].messageDate.getTime();
-
-        return this.postMessagesToXapianWorker(searchIndexDocumentUpdates).pipe(
-            map(() => msginfos)
-          );
-        }
-      ), catchError((err) => {
-        console.log('Other error', err);
-        return of();
-      })).subscribe(() => {
-          this.notifyOnNewMessages = true;
-          this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
-      });
+      this.notifyOnNewMessages = true;
+      this.indexUpdateIntervalId = setTimeout(() => this.updateIndexWithNewChanges(), 10000);
     }
 
     checkIfDownloadableIndexExists(): Observable<boolean> {

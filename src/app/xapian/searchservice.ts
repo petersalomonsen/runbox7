@@ -140,7 +140,6 @@ export class SearchService {
   currentDocData: SearchIndexDocumentData;
 
   constructor(public rmmapi: RunboxWebmailAPI,
-       private http: Http,
        private httpclient: HttpClient,
        private ngZone: NgZone,
        private snackbar: MatSnackBar,
@@ -451,10 +450,10 @@ export class SearchService {
           );
 
         const downloadAndWriteFile = (filename: string, fileno: number): Observable<void> => {
-          return this.http.get('/mail/download_xapian_index?fileno=' + fileno,
-            {responseType: ResponseContentType.ArrayBuffer}
+          return this.httpclient.get('/mail/download_xapian_index?fileno=' + fileno,
+            {responseType: 'arraybuffer'}
           ).pipe(map(r => {
-              const data = new Uint8Array(r.arrayBuffer());
+              const data = new Uint8Array(r);
               FS.writeFile('xapianglasswr/' + filename, data, { encoding: 'binary' });
               loaded += data.length;
             }));
@@ -845,15 +844,14 @@ export class SearchService {
     }
 
     checkIfDownloadableIndexExists(): Observable<boolean> {
-      return this.http.get('/mail/download_xapian_index?exists=check').pipe(
-                      map((res: Response) => {
-                        const stat = res.json();
-                        this.serverIndexSize = stat.size;
-                        this.serverIndexSizeUncompressed = stat.uncompressedsize;
-                        console.log('Downloadable index exists: ' + stat.exists);
-                        return stat.exists;
-                      })
-                    );
+      return this.httpclient.get('/mail/download_xapian_index?exists=check').pipe(
+            map((stat: any) => {
+              this.serverIndexSize = stat.size;
+              this.serverIndexSizeUncompressed = stat.uncompressedsize;
+              console.log('Downloadable index exists: ' + stat.exists);
+              return stat.exists;
+            })
+          );
     }
 
     downloadPartitions(): Observable<any> {

@@ -144,7 +144,6 @@ export class SearchService {
        private ngZone: NgZone,
        private snackbar: MatSnackBar,
        private dialog: MatDialog,
-       private progressService: ProgressService,
        private messagelistservice: MessageListService) {
 
       this.messagelistservice.searchservice = this;
@@ -443,20 +442,28 @@ export class SearchService {
 
         this.downloadProgress = 0;
         let loaded = 0;
-        const progressSubscription = this.progressService.downloadProgress.pipe(
-            map((progress) => (loaded + progress.loaded) * 100 / this.serverIndexSizeUncompressed)
-          ).subscribe((p) =>
-              this.downloadProgress = p
-          );
 
         const downloadAndWriteFile = (filename: string, fileno: number): Observable<void> => {
-          return this.httpclient.get('/mail/download_xapian_index?fileno=' + fileno,
-            {responseType: 'arraybuffer'}
-          ).pipe(map(r => {
-              const data = new Uint8Array(r);
-              FS.writeFile('xapianglasswr/' + filename, data, { encoding: 'binary' });
-              loaded += data.length;
-            }));
+          return this.httpclient.request(
+            new HttpRequest<any>('GET', '/mail/download_xapian_index?fileno=' + fileno,
+            {responseType: 'arraybuffer', reportProgress: true}
+          )).pipe(
+            map(event => {
+              if (event.type === HttpEventType.DownloadProgress) {
+                  const progress = ((loaded + event.loaded) * 100 / this.serverIndexSizeUncompressed);
+                  this.downloadProgress = progress === 100 ? null : progress;
+              } else if (event.type === HttpEventType.Response) {
+                const data = new Uint8Array(event.body as ArrayBuffer);
+                FS.writeFile('xapianglasswr/' + filename, data, { encoding: 'binary' });
+                loaded += data.length;
+              }
+              return event;
+            }),
+            filter(event => event.type === HttpEventType.Response),
+            map(event => {
+              console.log('download complete for', filename, fileno);
+            })
+          );
         };
 
         if (this.localSearchActivated) {
@@ -478,7 +485,7 @@ export class SearchService {
             this.localSearchActivated = true;
             this.updateFolderInfo();
             this.updateIndexLastUpdateTime();
-            progressSubscription.unsubscribe();
+
             this.downloadProgress = null;
             observer.next(true);
           });

@@ -23,12 +23,10 @@ import { Injector } from '@angular/core';
 import { RunboxWebmailAPI, RunboxMe, FolderCountEntry } from '../rmmapi/rbwebmail';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { MatSnackBarModule, MatDialogModule } from '@angular/material';
-import { ProgressService } from '../http/progress.service';
+
 import { MessageListService } from '../rmmapi/messagelist.service';
 import { XapianAPI } from './rmmxapianapi';
 import { xapianLoadedSubject } from './xapianwebloader';
-import { Observable } from 'rxjs';
-import { take } from 'rxjs/operators';
 
 declare var FS;
 declare var IDBFS;
@@ -46,7 +44,6 @@ describe('SearchService', () => {
             MatDialogModule
           ],
           providers: [ SearchService,
-            ProgressService,
             MessageListService,
             RunboxWebmailAPI
           ]

@@ -1,3 +1,22 @@
+// --------- BEGIN RUNBOX LICENSE ---------
+// Copyright (C) 2016-2018 Runbox Solutions AS (runbox.com).
+// 
+// This file is part of Runbox 7.
+// 
+// Runbox 7 is free software: You can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+// 
+// Runbox 7 is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with Runbox 7. If not, see <https://www.gnu.org/licenses/>.
+// ---------- END RUNBOX LICENSE ----------
+
 import { SearchService, XAPIAN_GLASS_WR } from './searchservice';
 import { TestBed } from '@angular/core/testing';
 import { Injector } from '@angular/core';
@@ -13,7 +32,6 @@ import { take } from 'rxjs/operators';
 
 declare var FS;
 declare var IDBFS;
-declare var Module;
 
 describe('SearchService', () => {
 
@@ -48,12 +66,15 @@ describe('SearchService', () => {
         expect(await searchService.initSubject.toPromise()).toBeFalsy();
         expect(searchService.localSearchActivated).toBeFalsy();
 
+        clearTimeout(searchService.indexUpdateIntervalId);
+
         await new Promise(resolve => {
             const idbreq = window.indexedDB.deleteDatabase('/' + searchService.localdir);
             idbreq.onsuccess = () => resolve();
         });
 
         console.log('deleted db', searchService.localdir);
+        FS.chdir('/');
     });
 
     it('should create local index and load searchservice', async () => {
@@ -173,5 +194,11 @@ describe('SearchService', () => {
 
         expect(searchService.api.sortedXapianQuery('SecretSauceFormula', 0, 0, 0, 100, -1).length).toBe(1);
         expect(searchService.api.getXapianDocCount()).toBe(2);
+        clearTimeout(searchService.indexUpdateIntervalId);
+
+        FS.chdir('/');
+        FS.unmount('/' + localdir);
+
+        console.log(searchService.api.getXapianDocCount(), 'docs in xapian db');
     });
 });

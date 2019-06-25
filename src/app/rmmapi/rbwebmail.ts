@@ -236,8 +236,9 @@ export class RunboxWebmailAPI {
 
     public listDeletedMessagesSince(sincechangeddate: Date): Observable<number[]> {
         const datestring = sincechangeddate.toJSON().replace('T', ' ').substr(0, 'yyyy-MM-dd HH:mm:ss'.length);
-        const now = new Date();
-        return this.http.get(`/rest/v1/list/deleted_messages/${datestring}`).pipe(
+        const url = `/rest/v1/list/deleted_messages/${datestring}`;
+
+        return this.http.get(url).pipe(
             map((r: any) => (r.message_ids as number[]))
         );
     }
@@ -249,12 +250,14 @@ export class RunboxWebmailAPI {
         skipContent: boolean = false,
         folder?: string)
         : Observable<MessageInfo[]> {
-        return this.http.get('/mail/download_xapian_index?listallmessages=1' +
-            '&page=' + page +
-            '&sinceid=' + sinceid +
-            '&sincechangeddate=' + Math.floor(sincechangeddate / 1000) +
-            '&pagesize=' + pagesize + (skipContent ? '&skipcontent=1' : '') +
-            (folder ? '&folder=' + folder.replace(/\//g, '.') : ''), { responseType: 'text' }).pipe(
+        const url = '/mail/download_xapian_index?listallmessages=1' +
+                    '&page=' + page +
+                    '&sinceid=' + sinceid +
+                    '&sincechangeddate=' + Math.floor(sincechangeddate / 1000) +
+                    '&pagesize=' + pagesize + (skipContent ? '&skipcontent=1' : '') +
+                    (folder ? '&folder=' + folder.replace(/\//g, '.') : '');
+
+        return this.http.get(url, { responseType: 'text' }).pipe(
             map((txt: string) => txt.length > 0 ? txt.split('\n') : []),
             map((lines: string[]) =>
                 lines.map((line) => {

@@ -500,7 +500,9 @@ export class CanvasTableComponent implements AfterViewInit, DoCheck {
           tooltipText = tooltipText(this.rows[this.hoverRowIndex]);
         }
 
-        if (!event.shiftKey && !this.lastMouseDownEvent && tooltipText) {
+        if (!event.shiftKey && !this.lastMouseDownEvent &&
+            (tooltipText || this.columns[colIndex].draggable)
+          ) {
           if (this.rowWrapMode &&
             colIndex >= this.rowWrapModeWrapColumn) {
             // Subtract first row width if in row wrap mode

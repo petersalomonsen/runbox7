@@ -4,19 +4,17 @@
     <mat-icon>add</mat-icon>
   </button>
 </div>
-<mat-tree cdkDropList (cdkDropListDropped)="folderReorderingDrop($event)" [dataSource]="dataSource" [treeControl]="treeControl">
+<mat-tree cdkDropList [dataSource]="dataSource" [treeControl]="treeControl">
     <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding
       matTreeNodePaddingIndent="20" style="display: flex"
       [ngClass]="{
         'selectedFolder' : selectedFolder == node.folderPath,
         'dropToFolderAllowed' : dropFolderId === node.folderId
         }"
-        (drop)="dropToFolder(node.folderId)"         
+        (drop)="dropToFolder($event,node.folderId)"         
         (dragover)="allowDropToFolder($event,node.folderId);treeControl.expand(node)" 
         (dragleave)="dropFolderId=null" class="mailFolder"
         (click)="selectFolder(node.folderPath)"
-        cdkDrag
-        [cdkDragData]="node"
       >
         <button mat-icon-button matTreeNodeToggle
                 [attr.aria-label]="'toggle ' + node.folderName"
@@ -32,9 +30,13 @@
         <mat-icon *ngIf="node.folderType=='templates'" mat-list-icon class="folderIconStandard">description</mat-icon>
         <mat-icon *ngIf="node.folderType=='trash'" mat-list-icon class="folderIconStandard">delete</mat-icon>
         <mat-icon *ngIf="node.folderType=='user'" mat-list-icon class="folderIconUser">folder</mat-icon>
-	<span style="margin-left: 5px;">{{node.folderName}}</span>
+        <div style="margin-left: 5px;" 
+              draggable="true"
+              (dragstart)="dragFolderStart($event, node.folderId)">
+              {{node.folderName}}
+        </div>
         <span *ngIf="node.newMessages" matBadge="{{node.newMessages}}" matBadgeOverlap="true" class="newMessagesCount" matBadgeSize="medium">&nbsp;</span>
-	<span style="flex-grow: 1"></span>
+	      <span style="flex-grow: 1"></span>
         <span class="foldersidebarcount">{{node.totalMessages}}</span>   
         
         <ng-container [ngSwitch]="node.folderType">

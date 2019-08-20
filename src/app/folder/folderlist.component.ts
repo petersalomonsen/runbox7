@@ -146,8 +146,19 @@ export class FolderListComponent {
         this.dropFolderId = folderId;
     }
 
-    dropToFolder(folderId: number): void {
-        this.droppedToFolder.emit(folderId);
+    dropToFolder(event: DragEvent, folderId: number): void {
+        console.log(event);
+        const eventText = event.dataTransfer.getData('text');
+        if (eventText.indexOf('folderId:') === 0) {
+            this.folderReorderingDrop(parseInt(eventText.substr('folderId:'.length), 10), folderId);
+        } else {
+            this.droppedToFolder.emit(folderId);
+        }
+    }
+
+    dragFolderStart(event, folderId: NumberConstructor): void {
+        event.dataTransfer.dropEffect = 'move';
+        event.dataTransfer.setData('text/plain', 'folderId:' + folderId);
     }
 
     clearSelection() {
@@ -221,13 +232,10 @@ export class FolderListComponent {
         ).subscribe(() => this.messagelistservice.refreshFolderCount());
     }
 
-    async folderReorderingDrop(event: CdkDragDrop<string[]>) {
+    async folderReorderingDrop(sourceFolderId: number, destinationFolderId: number) {
         const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
-        const sourceIndex = folders.findIndex(fld => fld.folderId === event.item.data.folderId);
-        const destinationNode = (await this.dataSource.connect({
-                viewChange: of({start: 0, end: folders.length})
-            }).pipe(take(1)).toPromise())[event.currentIndex];
-        const destinationIndex = folders.findIndex(folder => folder.folderId === destinationNode.folderId);
+        const sourceIndex = folders.findIndex(fld => fld.folderId === sourceFolderId);
+        const destinationIndex = folders.findIndex(folder => folder.folderId === destinationFolderId);
 
         let moveCount = 1;
         while ( sourceIndex + moveCount < folders.length &&

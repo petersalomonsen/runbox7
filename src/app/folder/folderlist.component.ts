@@ -27,6 +27,7 @@ import { SimpleInputDialog, SimpleInputDialogParams } from '../dialog/simpleinpu
 import { Observable, of, from } from 'rxjs';
 import { first, map, filter, mergeMap, tap, take, last, bufferCount } from 'rxjs/operators';
 import { FlatTreeControl } from '@angular/cdk/tree';
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 
 class FolderNode {
     children: FolderNode[];
@@ -218,6 +219,17 @@ export class FolderListComponent {
             filter(res => res === true),
             mergeMap(() => this.rmmapi.deleteFolder(folder.folderId))
         ).subscribe(() => this.messagelistservice.refreshFolderCount());
+    }
+
+    async folderReorderingDrop(event: CdkDragDrop<string[]>) {
+        const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        const sourceIndex = folders.findIndex(fld => fld.folderId === event.item.data.folderId);
+        const destinationNode = (await this.dataSource.connect({
+                viewChange: of({start: 0, end: folders.length})
+            }).pipe(take(1)).toPromise())[event.currentIndex];
+        const destinationIndex = folders.findIndex(folder => folder.folderId === destinationNode.folderId);
+        moveItemInArray(folders, sourceIndex, destinationIndex);
+        this.messagelistservice.folderCountSubject.next(folders);
     }
 
     async emptyTrash() {

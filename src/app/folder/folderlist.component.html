@@ -4,7 +4,7 @@
     <mat-icon>add</mat-icon>
   </button>
 </div>
-<mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
+<mat-tree cdkDropList (cdkDropListDropped)="folderReorderingDrop($event)" [dataSource]="dataSource" [treeControl]="treeControl">
     <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding
       matTreeNodePaddingIndent="20" style="display: flex"
       [ngClass]="{
@@ -15,6 +15,8 @@
         (dragover)="allowDropToFolder($event,node.folderId);treeControl.expand(node)" 
         (dragleave)="dropFolderId=null" class="mailFolder"
         (click)="selectFolder(node.folderPath)"
+        cdkDrag
+        [cdkDragData]="node"
       >
         <button mat-icon-button matTreeNodeToggle
                 [attr.aria-label]="'toggle ' + node.folderName"

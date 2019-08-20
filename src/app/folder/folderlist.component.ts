@@ -228,7 +228,22 @@ export class FolderListComponent {
                 viewChange: of({start: 0, end: folders.length})
             }).pipe(take(1)).toPromise())[event.currentIndex];
         const destinationIndex = folders.findIndex(folder => folder.folderId === destinationNode.folderId);
-        moveItemInArray(folders, sourceIndex, destinationIndex);
+
+        let moveCount = 1;
+        while ( sourceIndex + moveCount < folders.length &&
+                folders[sourceIndex + moveCount].folderLevel > folders[sourceIndex].folderLevel) {
+            // also move all sub folders if any
+            moveCount ++;
+        }
+
+        for (let n = 0; n < moveCount; n++) {
+            if ( destinationIndex > sourceIndex) {
+                moveItemInArray(folders, sourceIndex, destinationIndex);
+            } else {
+                moveItemInArray(folders, sourceIndex + n, destinationIndex + n);
+            }
+        }
+
         this.messagelistservice.folderCountSubject.next(folders);
     }
 

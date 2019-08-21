@@ -6,14 +6,17 @@
 </div>
 <mat-tree cdkDropList [dataSource]="dataSource" [treeControl]="treeControl">
     <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding
-      matTreeNodePaddingIndent="20" style="display: flex"
+      matTreeNodePaddingIndent="20"
+      style="display: flex"
       [ngClass]="{
         'selectedFolder' : selectedFolder == node.folderPath,
-        'dropToFolderAllowed' : dropFolderId === node.folderId
+        'dropToFolderAllowed' : dropFolderId===node.folderId && dropAboveOrBelowOrInside === 3,
+        'dropAboveFolderAllowed' : dropFolderId===node.folderId && dropAboveOrBelowOrInside === 1,
+        'dropBelowFolderAllowed' : dropFolderId===node.folderId && dropAboveOrBelowOrInside === 2
         }"
         (drop)="dropToFolder($event,node.folderId)"         
-        (dragover)="allowDropToFolder($event,node.folderId);treeControl.expand(node)" 
-        (dragleave)="dropFolderId=null" class="mailFolder"
+        (dragover)="allowDropToFolder($event,node)" 
+        (dragleave)="dragLeave()" class="mailFolder"
         (click)="selectFolder(node.folderPath)"
       >
         <button mat-icon-button matTreeNodeToggle

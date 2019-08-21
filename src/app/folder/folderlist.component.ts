@@ -44,6 +44,7 @@ class FolderNode {
 export class FolderListComponent {
     selectedFolder = 'Inbox';
     dropFolderId: number;
+    dropAboveOrBelowOrInside = 0;
 
     folders: Observable<Array<FolderCountEntry>>;
 
@@ -141,24 +142,44 @@ export class FolderListComponent {
     private _getLevel = (node: FolderCountEntry) => node.folderLevel;
     private _isExpandable = (node: FolderCountEntry) => node.isExpandable ? true : false;
 
-    allowDropToFolder(event, folderId: number): void {
+    allowDropToFolder(event: DragEvent, node: FolderCountEntry): void {
+        const eventText = event.dataTransfer.getData('text');
+        if (eventText.indexOf('folderId:') === 0) {
+            if (event.offsetY < 10) {
+                this.dropAboveOrBelowOrInside = 1;
+            } else if (event.offsetY > 38) {
+                this.dropAboveOrBelowOrInside = 2;
+            } else {
+                this.dropAboveOrBelowOrInside = 3;
+            }
+        } else {
+            this.dropAboveOrBelowOrInside = 3;
+        }
+        this.dropFolderId = node.folderId;
+
+        this.treeControl.expand(node);
         event.preventDefault();
-        this.dropFolderId = folderId;
     }
 
     dropToFolder(event: DragEvent, folderId: number): void {
-        console.log(event);
         const eventText = event.dataTransfer.getData('text');
         if (eventText.indexOf('folderId:') === 0) {
             this.folderReorderingDrop(parseInt(eventText.substr('folderId:'.length), 10), folderId);
         } else {
             this.droppedToFolder.emit(folderId);
         }
+        this.dropAboveOrBelowOrInside = 0;
+        this.dropFolderId = 0;
     }
 
     dragFolderStart(event, folderId: NumberConstructor): void {
         event.dataTransfer.dropEffect = 'move';
         event.dataTransfer.setData('text/plain', 'folderId:' + folderId);
+    }
+
+    dragLeave() {
+        this.dropFolderId = 0;
+        this.dropAboveOrBelowOrInside = 0;
     }
 
     clearSelection() {

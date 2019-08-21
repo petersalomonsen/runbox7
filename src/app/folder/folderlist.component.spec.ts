@@ -101,4 +101,54 @@ describe('FolderListComponent', () => {
         });
         expect(refreshFolderCountCalled).toBeTruthy();
     }));
+    fit('folderReorderingDrop', async () => {
+        const comp = new FolderListComponent({
+            folderCountSubject: new BehaviorSubject([
+                new FolderCountEntry(1,
+                    50, 40, 'inbox', 'folder1', 'folder2', 0),
+                new FolderCountEntry(2,
+                        50, 40, 'user', 'folder2', 'folder2', 0),
+                new FolderCountEntry(3,
+                    50, 40, 'user', 'subfolder', 'folder2.subfolder', 1),
+                new FolderCountEntry(4,
+                    50, 40, 'user', 'subsubfolder', 'folder2.subfolder.subsubfolder', 2),
+                new FolderCountEntry(5,
+                    50, 40, 'user', 'subsubfolder2', 'folder2.subfolder.subsubfolder2', 2),
+                new FolderCountEntry(6,
+                        50, 40, 'user', 'subsubfolder3', 'folder2.subfolder.subsubfolder3', 2),
+                new FolderCountEntry(7,
+                    50, 40, 'user', 'folder3', 'folder3', 0)
+            ])
+        } as MessageListService, null, null);
+
+        console.log('move folder with id 6 above 5');
+        await comp.folderReorderingDrop(6, 5, 1);
+        let rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 6, 5, 7]);
+
+        console.log('move folder with id 6 above 5 - should not cause any changes');
+        await comp.folderReorderingDrop(6, 5, 1);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 6, 5, 7]);
+
+        console.log('move folder with id 6 below 5');
+        comp.folderReorderingDrop(6, 5, 2);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+
+        console.log('move folder with id 5 below 7');
+        comp.folderReorderingDrop(5, 7, 2);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 6, 7, 5]);
+        expect(rearrangedFolders[6].folderPath).toBe('subsubfolder2');
+
+        console.log('move folder with id 5 inside 7');
+        comp.folderReorderingDrop(5, 7, 3);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 6, 7, 5]);
+        expect(rearrangedFolders[6].folderPath).toBe('folder3/subsubfolder2');
+    });
 });

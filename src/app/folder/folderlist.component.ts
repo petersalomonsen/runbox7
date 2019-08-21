@@ -142,16 +142,27 @@ export class FolderListComponent {
     private _getLevel = (node: FolderCountEntry) => node.folderLevel;
     private _isExpandable = (node: FolderCountEntry) => node.isExpandable ? true : false;
 
+    /**
+     * Folderlist entry is 48 pixels, so if mouse is in the upper region suggest dropping above,
+     * if in the middle suggest inside, or suggest below if in the lower region
+     * 
+     * @param offsetY 
+     * @returns number 1 if drop above, 2 if below, 3 if inside
+     */
+    isDropAboveOrBelowOrInside(offsetY: number) {
+        if (offsetY < 15) {
+            return 1;
+        } else if (offsetY > 33) {
+            return 2;
+        } else {
+            return 3;
+        }
+    }
+
     allowDropToFolder(event: DragEvent, node: FolderCountEntry): void {
         const eventText = event.dataTransfer.getData('text');
         if (eventText.indexOf('folderId:') === 0) {
-            if (event.offsetY < 10) {
-                this.dropAboveOrBelowOrInside = 1;
-            } else if (event.offsetY > 38) {
-                this.dropAboveOrBelowOrInside = 2;
-            } else {
-                this.dropAboveOrBelowOrInside = 3;
-            }
+            this.dropAboveOrBelowOrInside = this.isDropAboveOrBelowOrInside(event.offsetY);
         } else {
             this.dropAboveOrBelowOrInside = 3;
         }
@@ -164,7 +175,8 @@ export class FolderListComponent {
     dropToFolder(event: DragEvent, folderId: number): void {
         const eventText = event.dataTransfer.getData('text');
         if (eventText.indexOf('folderId:') === 0) {
-            this.folderReorderingDrop(parseInt(eventText.substr('folderId:'.length), 10), folderId);
+            this.folderReorderingDrop(parseInt(eventText.substr('folderId:'.length), 10),
+                folderId, this.isDropAboveOrBelowOrInside(event.offsetY));
         } else {
             this.droppedToFolder.emit(folderId);
         }
@@ -253,10 +265,45 @@ export class FolderListComponent {
         ).subscribe(() => this.messagelistservice.refreshFolderCount());
     }
 
-    async folderReorderingDrop(sourceFolderId: number, destinationFolderId: number) {
+    async folderReorderingDrop(sourceFolderId: number, destinationFolderId: number, aboveOrBelowOrInside: number) {
+        if (sourceFolderId === destinationFolderId) {
+            // can't move a folder above, below or inside itself
+            return;
+        }
+
         const folders = await this.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
-        const sourceIndex = folders.findIndex(fld => fld.folderId === sourceFolderId);
-        const destinationIndex = folders.findIndex(folder => folder.folderId === destinationFolderId);
+        let sourceIndex = folders.findIndex(fld => fld.folderId === sourceFolderId);
+        let destinationIndex = folders.findIndex(folder => folder.folderId === destinationFolderId);
+
+        let destinationFolderLevel = 0;
+        let destinationParent = '';
+
+        const getParentFromFolderPath = folderPath => {
+            const pathArr = folderPath.split('/');
+            return pathArr.slice(0, pathArr.length - 1).join('/');
+        };
+
+        switch (aboveOrBelowOrInside) {
+            case 1:
+                if (destinationIndex - sourceIndex === 1) {
+                    // already above, don't move in the array
+                    destinationIndex = sourceIndex;
+                }
+                destinationFolderLevel = folders[destinationIndex].folderLevel;
+                destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
+                break;
+            case 2:
+                // below
+                destinationFolderLevel = folders[destinationIndex].folderLevel;
+                destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
+                break;
+            case 3:
+                // inside
+                destinationFolderLevel = folders[destinationIndex].folderLevel + 1;
+                destinationParent =  folders[destinationIndex].folderPath;
+                destinationIndex++;
+                break;
+        }
 
         let moveCount = 1;
         while ( sourceIndex + moveCount < folders.length &&
@@ -265,12 +312,32 @@ export class FolderListComponent {
             moveCount ++;
         }
 
+        const sourceParent = getParentFromFolderPath(folders[sourceIndex].folderPath);
+        const sourceFolderLevel = folders[sourceIndex].folderLevel;
+
+        // Change folderlevels and parents
         for (let n = 0; n < moveCount; n++) {
-            if ( destinationIndex > sourceIndex) {
-                moveItemInArray(folders, sourceIndex, destinationIndex);
-            } else {
-                moveItemInArray(folders, sourceIndex + n, destinationIndex + n);
-            }
+            const folder = folders[sourceIndex + n];
+            console.log('destparent / src path', destinationParent, folder.folderPath);
+            folder.folderPath =
+                `${destinationParent}${destinationParent.length > 0 ? '/' : ''}` +
+                `${folder.folderPath.substring(sourceParent.length ? sourceParent.length + 1 : 0)}`;
+            folder.folderLevel = folder.folderLevel - sourceFolderLevel + destinationFolderLevel;
+        }
+
+        console.log('src/dest', sourceIndex, destinationIndex);
+        while (sourceIndex > destinationIndex) {
+            const tempFolder = folders[sourceIndex - 1];
+            folders.copyWithin(sourceIndex - 1, sourceIndex, sourceIndex + moveCount);
+            sourceIndex--;
+            folders[sourceIndex + moveCount] = tempFolder;
+        }
+
+        while (sourceIndex < destinationIndex) {
+            const tempFolder = folders[sourceIndex + moveCount];
+            folders.copyWithin(sourceIndex + 1, sourceIndex, sourceIndex + moveCount);
+            folders[sourceIndex] = tempFolder;
+            sourceIndex++;
         }
 
         this.messagelistservice.folderCountSubject.next(folders);

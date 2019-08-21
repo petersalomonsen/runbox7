@@ -150,5 +150,22 @@ describe('FolderListComponent', () => {
         console.log(rearrangedFolders.map(f => f.folderId));
         expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 2, 3, 4, 6, 7, 5]);
         expect(rearrangedFolders[6].folderPath).toBe('folder3/subsubfolder2');
+
+        console.log('move folder with id 7 above 1');
+        comp.folderReorderingDrop(7, 1, 1);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([7, 5, 1, 2, 3, 4, 6]);
+        expect(rearrangedFolders[0].folderPath).toBe('folder3');
+        expect(rearrangedFolders[1].folderPath).toBe('folder3/subsubfolder2');
+
+        console.log('move folder with id 7 below 1');
+        comp.folderReorderingDrop(7, 1, 2);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 7, 5, 2, 3, 4, 6]);
+        expect(rearrangedFolders[1].folderPath).toBe('folder3');
+        expect(rearrangedFolders[2].folderPath).toBe('folder3/subsubfolder2');
+
     });
 });

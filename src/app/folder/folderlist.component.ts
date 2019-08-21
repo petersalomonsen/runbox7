@@ -283,8 +283,17 @@ export class FolderListComponent {
             return pathArr.slice(0, pathArr.length - 1).join('/');
         };
 
+        let moveCount = 1;
+        while ( sourceIndex + moveCount < folders.length &&
+                folders[sourceIndex + moveCount].folderLevel > folders[sourceIndex].folderLevel) {
+            // also move all sub folders if any
+            moveCount ++;
+        }
+
+        console.log('src/dest', sourceIndex, destinationIndex);
         switch (aboveOrBelowOrInside) {
             case 1:
+                // above
                 if (destinationIndex - sourceIndex === 1) {
                     // already above, don't move in the array
                     destinationIndex = sourceIndex;
@@ -296,6 +305,11 @@ export class FolderListComponent {
                 // below
                 destinationFolderLevel = folders[destinationIndex].folderLevel;
                 destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
+
+                if (destinationIndex - sourceIndex === moveCount) {
+                    // if destination is just below folder(s) to be moved
+                    destinationIndex = sourceIndex + 1;
+                }
                 break;
             case 3:
                 // inside
@@ -305,12 +319,6 @@ export class FolderListComponent {
                 break;
         }
 
-        let moveCount = 1;
-        while ( sourceIndex + moveCount < folders.length &&
-                folders[sourceIndex + moveCount].folderLevel > folders[sourceIndex].folderLevel) {
-            // also move all sub folders if any
-            moveCount ++;
-        }
 
         const sourceParent = getParentFromFolderPath(folders[sourceIndex].folderPath);
         const sourceFolderLevel = folders[sourceIndex].folderLevel;
@@ -318,14 +326,13 @@ export class FolderListComponent {
         // Change folderlevels and parents
         for (let n = 0; n < moveCount; n++) {
             const folder = folders[sourceIndex + n];
-            console.log('destparent / src path', destinationParent, folder.folderPath);
+
             folder.folderPath =
                 `${destinationParent}${destinationParent.length > 0 ? '/' : ''}` +
                 `${folder.folderPath.substring(sourceParent.length ? sourceParent.length + 1 : 0)}`;
             folder.folderLevel = folder.folderLevel - sourceFolderLevel + destinationFolderLevel;
         }
 
-        console.log('src/dest', sourceIndex, destinationIndex);
         while (sourceIndex > destinationIndex) {
             const tempFolder = folders[sourceIndex - 1];
             folders.copyWithin(sourceIndex - 1, sourceIndex, sourceIndex + moveCount);

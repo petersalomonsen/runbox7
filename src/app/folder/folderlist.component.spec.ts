@@ -167,5 +167,15 @@ describe('FolderListComponent', () => {
         expect(rearrangedFolders[1].folderPath).toBe('folder3');
         expect(rearrangedFolders[2].folderPath).toBe('folder3/subsubfolder2');
 
+        console.log('move folder with id 4 above 7');
+        comp.folderReorderingDrop(4, 7, 1);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 4, 7, 5, 2, 3, 6]);
+        expect(rearrangedFolders[1].folderPath).toBe('subsubfolder');
+        expect(rearrangedFolders[1].folderPath).toBe('subsubfolder');
+        expect(rearrangedFolders[2].folderPath).toBe('folder3');
+        expect(rearrangedFolders[3].folderPath).toBe('folder3/subsubfolder2');
+
     });
 });

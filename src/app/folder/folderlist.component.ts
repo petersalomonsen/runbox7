@@ -303,7 +303,7 @@ export class FolderListComponent {
                 destinationFolderLevel = folders[destinationIndex].folderLevel;
                 destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
                 if (destinationIndex > sourceIndex) {
-                    destinationIndex = destinationIndex - moveCount;
+                    destinationIndex -=  moveCount;
                 }
                 break;
             case 2:
@@ -311,14 +311,10 @@ export class FolderListComponent {
                 destinationFolderLevel = folders[destinationIndex].folderLevel;
                 destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
 
-                if (destinationIndex - sourceIndex === moveCount) {
-                    // if destination is just below folder(s) to be moved
-                    destinationIndex = sourceIndex + 1;
-                }
-
-                if (sourceIndex - destinationIndex === 1) {
-                    // already below, don't move in the array
-                    destinationIndex = sourceIndex;
+                if (destinationIndex > sourceIndex) {
+                    destinationIndex -= (moveCount - 1);
+                } else {
+                    destinationIndex++;
                 }
                 break;
             case 3:
@@ -326,8 +322,10 @@ export class FolderListComponent {
                 destinationFolderLevel = folders[destinationIndex].folderLevel + 1;
                 destinationParent =  folders[destinationIndex].folderPath;
 
-                if ( sourceIndex > destinationIndex ) {
-                    destinationIndex ++;
+                if (destinationIndex > sourceIndex) {
+                    destinationIndex -= (moveCount - 1);
+                } else {
+                    destinationIndex++;
                 }
                 break;
         }

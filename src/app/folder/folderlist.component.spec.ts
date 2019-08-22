@@ -249,5 +249,13 @@ describe('FolderListComponent', () => {
         expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 7, 4, 6, 5, 3, 2]);
         expect(rearrangedFolders.map(f => f.folderLevel)).toEqual([0, 0, 0, 1, 0, 1, 0]);
 
+        console.log('move folder with id 6 below 7');
+        comp.folderReorderingDrop(6, 7, 2);
+        rearrangedFolders = await comp.messagelistservice.folderCountSubject.pipe(take(1)).toPromise();
+        console.log(rearrangedFolders.map(f => f.folderId));
+
+        expect(rearrangedFolders.map(f => f.folderId)).toEqual([1, 7, 6, 4, 5, 3, 2]);
+        expect(rearrangedFolders.map(f => f.folderLevel)).toEqual([0, 0, 0, 0, 0, 1, 0]);
+
     });
 });

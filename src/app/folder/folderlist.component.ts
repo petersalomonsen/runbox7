@@ -117,6 +117,7 @@ export class FolderListComponent {
 
                     previousNode = folderNode;
                 });
+
                 return treedata;
             })
         );
@@ -275,6 +276,12 @@ export class FolderListComponent {
         let sourceIndex = folders.findIndex(fld => fld.folderId === sourceFolderId);
         let destinationIndex = folders.findIndex(folder => folder.folderId === destinationFolderId);
 
+        console.log(`move folder ${folders[sourceIndex].folderPath} ${
+                            aboveOrBelowOrInside === 1 ? 'above' :
+                            aboveOrBelowOrInside === 2 ? 'below' :
+                            aboveOrBelowOrInside === 3 ? 'inside' : ''
+                        } ${folders[destinationIndex].folderPath}`);
+
         let destinationFolderLevel = 0;
         let destinationParent = '';
 
@@ -319,7 +326,10 @@ export class FolderListComponent {
                 // inside
                 destinationFolderLevel = folders[destinationIndex].folderLevel + 1;
                 destinationParent =  folders[destinationIndex].folderPath;
-                destinationIndex++;
+
+                if ( sourceIndex > destinationIndex ) {
+                    destinationIndex ++;
+                }
                 break;
         }
 
@@ -350,6 +360,8 @@ export class FolderListComponent {
             folders[sourceIndex] = tempFolder;
             sourceIndex++;
         }
+
+        console.log(folders.map(f => `${f.folderPath}`));
 
         this.messagelistservice.folderCountSubject.next(folders);
     }

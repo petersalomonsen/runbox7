@@ -311,9 +311,23 @@ export class FolderListComponent {
                 destinationFolderLevel = folders[destinationIndex].folderLevel;
                 destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
 
+                const sourceIndexAfterDestination = sourceIndex > destinationIndex;
+                while (
+                    folders.length > (destinationIndex + 1) &&
+                    folders[destinationIndex + 1].folderLevel > destinationFolderLevel ) {
+                    // handle if the folder we're moving below has subfolders
+                    destinationIndex ++;
+                }
+
+                if (sourceIndexAfterDestination && sourceIndex <= destinationIndex) {
+                    // sourceIndex was within the subfolders
+                    console.log('source was within subfolders');
+                    destinationIndex --;
+                }
+
                 if (destinationIndex > sourceIndex) {
                     destinationIndex -= (moveCount - 1);
-                } else {
+                } else if ((destinationIndex + 1) < folders.length) {
                     destinationIndex++;
                 }
                 break;
@@ -358,7 +372,7 @@ export class FolderListComponent {
             sourceIndex++;
         }
 
-        console.log(folders.map(f => `${f.folderPath}`));
+        console.log('after rearrange', folders.map(f => `${f.folderId} ${f.folderPath}`));
 
         this.messagelistservice.folderCountSubject.next(folders);
     }

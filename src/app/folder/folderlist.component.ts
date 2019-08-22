@@ -290,7 +290,6 @@ export class FolderListComponent {
             moveCount ++;
         }
 
-        console.log('src/dest', sourceIndex, destinationIndex);
         switch (aboveOrBelowOrInside) {
             case 1:
                 // above
@@ -309,6 +308,11 @@ export class FolderListComponent {
                 if (destinationIndex - sourceIndex === moveCount) {
                     // if destination is just below folder(s) to be moved
                     destinationIndex = sourceIndex + 1;
+                }
+
+                if (sourceIndex - destinationIndex === 1) {
+                    // already below, don't move in the array
+                    destinationIndex = sourceIndex;
                 }
                 break;
             case 3:

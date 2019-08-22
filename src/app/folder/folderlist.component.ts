@@ -151,9 +151,9 @@ export class FolderListComponent {
      * @returns number 1 if drop above, 2 if below, 3 if inside
      */
     isDropAboveOrBelowOrInside(offsetY: number) {
-        if (offsetY < 15) {
+        if (offsetY < 5) {
             return 1;
-        } else if (offsetY > 33) {
+        } else if (offsetY > 43) {
             return 2;
         } else {
             return 3;
@@ -300,12 +300,11 @@ export class FolderListComponent {
         switch (aboveOrBelowOrInside) {
             case 1:
                 // above
-                if (destinationIndex - sourceIndex === 1) {
-                    // already above, don't move in the array
-                    destinationIndex = sourceIndex;
-                }
                 destinationFolderLevel = folders[destinationIndex].folderLevel;
                 destinationParent = getParentFromFolderPath(folders[destinationIndex].folderPath);
+                if (destinationIndex > sourceIndex) {
+                    destinationIndex = destinationIndex - moveCount;
+                }
                 break;
             case 2:
                 // below

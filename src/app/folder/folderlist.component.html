@@ -5,7 +5,7 @@
   </button>
 </div>
 <mat-tree cdkDropList [dataSource]="dataSource" [treeControl]="treeControl">
-    <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding
+    <mat-tree-node *matTreeNodeDef="let node" [matTreeNodePadding]="node.folderLevel"
       matTreeNodePaddingIndent="20"
       style="display: flex"
       [ngClass]="{

@@ -151,9 +151,9 @@ export class FolderListComponent {
      * @returns number 1 if drop above, 2 if below, 3 if inside
      */
     isDropAboveOrBelowOrInside(offsetY: number) {
-        if (offsetY < 5) {
+        if (offsetY < 7 && offsetY >= 0) {
             return 1;
-        } else if (offsetY > 43) {
+        } else if (offsetY > 41 && offsetY <= 48) {
             return 2;
         } else {
             return 3;

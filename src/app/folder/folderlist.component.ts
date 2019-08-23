@@ -375,9 +375,12 @@ export class FolderListComponent {
             sourceIndex++;
         }
 
-        console.log('after rearrange', folders.map(f => `${f.folderId} ${f.folderPath}`));
+        // console.log('after rearrange', folders.map(f => `${f.folderId} ${f.folderPath}`));
 
         this.messagelistservice.folderCountSubject.next(folders);
+
+        const newParentFolderId = destinationParent ? folders.find(fld => fld.folderPath === destinationParent).folderId : 0;
+        await this.rmmapi.moveFolder(sourceFolderId, newParentFolderId).toPromise();
     }
 
     async emptyTrash() {

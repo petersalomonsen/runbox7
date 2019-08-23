@@ -20,7 +20,7 @@
 import { FolderListComponent } from './folderlist.component';
 import { MessageListService } from '../rmmapi/messagelist.service';
 import { RunboxWebmailAPI, FolderCountEntry } from '../rmmapi/rbwebmail';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, of, Observable } from 'rxjs';
 import { async, tick, TestBed, getTestBed } from '@angular/core/testing';
 import { MessageInfo } from '../xapian/messageinfo';
 import { last, take } from 'rxjs/operators';
@@ -101,7 +101,7 @@ describe('FolderListComponent', () => {
         });
         expect(refreshFolderCountCalled).toBeTruthy();
     }));
-    fit('folderReorderingDrop', async () => {
+    it('folderReorderingDrop', async () => {
         const comp = new FolderListComponent({
             folderCountSubject: new BehaviorSubject([
                 new FolderCountEntry(1,
@@ -119,7 +119,11 @@ describe('FolderListComponent', () => {
                 new FolderCountEntry(7,
                     50, 40, 'user', 'folder3', 'folder3', 0)
             ])
-        } as MessageListService, null, null);
+        } as MessageListService, {
+            moveFolder: (folderId: number, newParentFolderId: number): Observable<boolean> => {
+                return of(true);
+            }
+        } as RunboxWebmailAPI, null);
 
         console.log('move folder with id 6 above 5');
         await comp.folderReorderingDrop(6, 5, 1);

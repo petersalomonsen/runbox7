@@ -17,7 +17,7 @@
         }"
         (drop)="dropToFolder($event,node.folderId)"         
         (dragover)="allowDropToFolder($event,node)" 
-        (dragexit)="dragCancel()" 
+        (dragend)="dragCancel()" 
         (click)="selectFolder(node.folderPath)"
       >
         <button mat-icon-button matTreeNodeToggle

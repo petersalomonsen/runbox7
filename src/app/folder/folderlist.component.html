@@ -8,6 +8,7 @@
     <mat-tree-node *matTreeNodeDef="let node" [matTreeNodePadding]="node.folderLevel"
       matTreeNodePaddingIndent="20"
       style="display: flex"
+      class="mailFolder"
       [ngClass]="{
         'selectedFolder' : selectedFolder == node.folderPath,
         'dropToFolderAllowed' : dropFolderId===node.folderId && dropAboveOrBelowOrInside === 3,
@@ -16,7 +17,7 @@
         }"
         (drop)="dropToFolder($event,node.folderId)"         
         (dragover)="allowDropToFolder($event,node)" 
-        (dragleave)="dragLeave()" class="mailFolder"
+        (dragexit)="dragCancel()" 
         (click)="selectFolder(node.folderPath)"
       >
         <button mat-icon-button matTreeNodeToggle

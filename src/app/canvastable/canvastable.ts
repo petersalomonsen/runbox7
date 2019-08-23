@@ -501,7 +501,7 @@ export class CanvasTableComponent implements AfterViewInit, DoCheck {
         }
 
         if (!event.shiftKey && !this.lastMouseDownEvent &&
-            (tooltipText || this.columns[colIndex].draggable)
+            (tooltipText || (this.columns[colIndex] && this.columns[colIndex].draggable))
           ) {
           if (this.rowWrapMode &&
             colIndex >= this.rowWrapModeWrapColumn) {

@@ -45,6 +45,7 @@ export class FolderListComponent {
     selectedFolder = 'Inbox';
     dropFolderId: number;
     dropAboveOrBelowOrInside = 0;
+    dragFolderInProgress = false;
 
     folders: Observable<Array<FolderCountEntry>>;
 
@@ -161,8 +162,7 @@ export class FolderListComponent {
     }
 
     allowDropToFolder(event: DragEvent, node: FolderCountEntry): void {
-        const eventText = event.dataTransfer.getData('text');
-        if (eventText.indexOf('folderId:') === 0) {
+        if (this.dragFolderInProgress) {
             this.dropAboveOrBelowOrInside = this.isDropAboveOrBelowOrInside(event.offsetY);
         } else {
             this.dropAboveOrBelowOrInside = 3;
@@ -182,16 +182,19 @@ export class FolderListComponent {
             this.droppedToFolder.emit(folderId);
         }
         this.dropAboveOrBelowOrInside = 0;
+        this.dragFolderInProgress = false;
         this.dropFolderId = 0;
     }
 
     dragFolderStart(event, folderId: NumberConstructor): void {
         event.dataTransfer.dropEffect = 'move';
         event.dataTransfer.setData('text/plain', 'folderId:' + folderId);
+        this.dragFolderInProgress = true;
     }
 
-    dragLeave() {
+    dragCancel() {
         this.dropFolderId = 0;
+        this.dragFolderInProgress = false;
         this.dropAboveOrBelowOrInside = 0;
     }
 

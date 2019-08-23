@@ -515,7 +515,7 @@ export class CanvasTableComponent implements AfterViewInit, DoCheck {
             (this.hoverRowIndex - this.topindex) * this.rowheight,
             colStartX - this.horizScroll + this.colpaddingleft,
             this.columns[colIndex].width - this.colpaddingright - this.colpaddingleft,
-            this.rowheight, tooltipText);
+            this.rowheight, tooltipText as string);
 
           if (this.rowWrapMode) {
             this.floatingTooltip.top +=

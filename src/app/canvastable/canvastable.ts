@@ -496,7 +496,7 @@ export class CanvasTableComponent implements AfterViewInit, DoCheck {
 
         let tooltipText = this.columns[colIndex] && this.columns[colIndex].tooltipText;
 
-        if (typeof tooltipText === 'function') {
+        if (typeof tooltipText === 'function' && this.rows[this.hoverRowIndex]) {
           tooltipText = tooltipText(this.rows[this.hoverRowIndex]);
         }
 

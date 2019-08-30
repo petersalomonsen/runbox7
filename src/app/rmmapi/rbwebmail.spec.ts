@@ -604,6 +604,7 @@ describe('RBWebMail', () => {
         req.flush(listEmailFoldersResponse);
 
         const folders = await folderCountPromise;
+        expect(folders[0].folderId).toBe(3692896);
         expect(folders.length).toBe(22);
         expect(folders.findIndex(folder => folder.folderPath === 'HTML')).toBe(10);
         expect(folders[11].folderPath).toBe('HTML/lalala');

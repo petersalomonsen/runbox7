@@ -366,7 +366,7 @@ export class RunboxWebmailAPI {
             folderLevel++;
             const flattenedFolders = folders.map(folder => {
                 const folderCountEntry = new FolderCountEntry(
-                    folder.id,
+                    parseInt(folder.id, 10),
                     folder.msg_new,
                     folder.total,
                     folder.type,

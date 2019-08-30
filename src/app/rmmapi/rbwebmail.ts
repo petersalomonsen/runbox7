@@ -353,10 +353,11 @@ export class RunboxWebmailAPI {
     }
 
     getFolderCount(): Observable<Array<FolderCountEntry>> {
+        let folderLevel = 0;
         let depth = 0;
         const flattenFolders = folders => {
-            depth++;
-            return folders.map(folder => {
+            folderLevel++;
+            const flattenedFolders = folders.map(folder => {
                 const folderCountEntry = new FolderCountEntry(
                     folder.id,
                     folder.msg_new,
@@ -364,11 +365,18 @@ export class RunboxWebmailAPI {
                     folder.type,
                     folder.name,
                     folder.folder,
-                    depth
+                    folderLevel - 1
                 );
+
                 return folder.subfolders.length > 0 ?
-                [folderCountEntry].concat(flattenFolders(folder.subfolders)) : folderCountEntry;
+                    [folderCountEntry].concat(flattenFolders(folder.subfolders)) : folderCountEntry;
+
             });
+            if (folderLevel > depth) {
+                depth = folderLevel;
+            }
+            folderLevel--;
+            return flattenedFolders;
         };
         return this.http.get('/rest/v1/email_folder/list').pipe(
             map((response: any) => flattenFolders(response.result.folders).flat(depth))

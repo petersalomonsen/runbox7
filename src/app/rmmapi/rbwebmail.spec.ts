@@ -88,7 +88,7 @@ describe('RBWebMail', () => {
         expect(messageContents.subject).toBe('test3');
     });
 
-    fit('should flatten folder tree structure', async () => {
+    it('should flatten folder tree structure', async () => {
         const listEmailFoldersResponse = {
             'status': 'success',
             'result': {
@@ -463,5 +463,12 @@ describe('RBWebMail', () => {
 
         const folders = await folderCountPromise;
         expect(folders.length).toBe(22);
+        expect(folders.findIndex(folder => folder.folderPath === 'HTML')).toBe(10);
+        expect(folders[11].folderPath).toBe('HTML/lalala');
+        expect(folders[11].folderLevel).toBe(1);
+        expect(folders[12].folderPath).toBe('HTML/lalala/Tester');
+        expect(folders[12].folderLevel).toBe(2);
+        expect(folders[15].folderPath).toBe('HTML/lalala/hohohohahaha/subtest');
+        expect(folders[15].folderLevel).toBe(3);
     });
 });

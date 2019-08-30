@@ -20,7 +20,7 @@
 import { SearchService, XAPIAN_GLASS_WR } from './searchservice';
 import { TestBed } from '@angular/core/testing';
 import { Injector } from '@angular/core';
-import { RunboxWebmailAPI, RunboxMe, FolderCountEntry } from '../rmmapi/rbwebmail';
+import { RunboxWebmailAPI, RunboxMe } from '../rmmapi/rbwebmail';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { MatSnackBarModule, MatDialogModule } from '@angular/material';
 

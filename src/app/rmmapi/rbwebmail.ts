@@ -338,11 +338,17 @@ export class RunboxWebmailAPI {
         return req.pipe(map((res: any) => res.status === 'success'));
     }
 
-    moveFolder(folderId: number, newParentFolderId: number): Observable<boolean> {
-        const req = this.http.put('/rest/v1/email_folder/move', {
-            'to_folder': newParentFolderId,
-            'folder_id': folderId
-        });
+    moveFolder(folderId: number, newParentFolderId: number, ordered_ids?: number[]): Observable<boolean> {
+        const requestBody: any = {
+                'to_folder': newParentFolderId,
+                'folder_id': folderId            
+            };
+
+        if(ordered_ids) {
+            requestBody.ordered_ids = ordered_ids;
+        }
+
+        const req = this.http.put('/rest/v1/email_folder/move', requestBody);
         this.subscribeShowBackendErrors(req);
         return req.pipe(map((res: any) => res.status === 'success'));
     }

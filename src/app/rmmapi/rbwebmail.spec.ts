@@ -22,7 +22,7 @@ import { RunboxWebmailAPI } from './rbwebmail';
 import { MatSnackBarModule, MatDialogModule } from '@angular/material';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 
-fdescribe('RBWebMail', () => {
+describe('RBWebMail', () => {
     beforeEach(() => {
         TestBed.configureTestingModule({
             imports: [

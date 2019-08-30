@@ -36,11 +36,62 @@ describe('SearchService', () => {
     let injector: Injector;
     let httpMock: HttpTestingController;
 
-    const folders = [
-        [1, 1, 2, 'inbox', 'Inbox', 'Inbox', 0 ],
-        [2, 0, 0, 'spam', 'Spam', 'Spam', 0],
-        [3, 0, 0, 'trash', 'Trash', 'Trash', 0 ]
-    ];
+    const listEmailFoldersResponse = {
+        'status': 'success',
+        'result': {
+            'folders': [
+                {
+                    'old': 296,
+                    'name': 'Inbox',
+                    'priority': '0',
+                    'id': '1',
+                    'parent': null,
+                    'new': 0,
+                    'total': 296,
+                    'folder': 'Inbox',
+                    'msg_new': 0,
+                    'msg_total': 296,
+                    'size': '11389678',
+                    'msg_size': '11389678',
+                    'subfolders': [],
+                    'type': 'inbox'
+                },
+                {
+                    'old': 296,
+                    'name': 'Spam',
+                    'priority': '0',
+                    'id': '2',
+                    'parent': null,
+                    'new': 0,
+                    'total': 296,
+                    'folder': 'Spam',
+                    'msg_new': 0,
+                    'msg_total': 296,
+                    'size': '11389678',
+                    'msg_size': '11389678',
+                    'subfolders': [],
+                    'type': 'spam'
+                },
+                {
+                    'old': 296,
+                    'name': 'Trash',
+                    'priority': '0',
+                    'id': '2',
+                    'parent': null,
+                    'new': 0,
+                    'total': 296,
+                    'folder': 'Trash',
+                    'msg_new': 0,
+                    'msg_total': 296,
+                    'size': '11389678',
+                    'msg_size': '11389678',
+                    'subfolders': [],
+                    'type': 'trash'
+                },
+            ]
+        }
+    };
+                
 
     beforeEach((() => {
         TestBed.configureTestingModule({
@@ -66,8 +117,8 @@ describe('SearchService', () => {
                 uid: 555
             } as RunboxMe
         });
-        req = httpMock.expectOne('/ajax?action=ajax_getfoldercount');
-        req.flush(folders);
+        req = httpMock.expectOne('/rest/v1/email_folder/list');
+        req.flush(listEmailFoldersResponse);
 
         expect(await searchService.initSubject.toPromise()).toBeFalsy();
         expect(searchService.localSearchActivated).toBeFalsy();
@@ -157,8 +208,9 @@ describe('SearchService', () => {
             } as RunboxMe
         });
 
-        req = httpMock.expectOne('/ajax?action=ajax_getfoldercount');
-        req.flush(folders);
+        req = httpMock.expectOne('/rest/v1/email_folder/list');
+        req.flush(listEmailFoldersResponse);
+
 
         expect(await searchService.initSubject.toPromise()).toBeTruthy();
         expect(searchService.localSearchActivated).toBeTruthy();

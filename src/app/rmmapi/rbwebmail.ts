@@ -48,6 +48,7 @@ export class MessageFields {
 
 export class FolderCountEntry {
     isExpandable?: boolean;
+    priority?: number; // for sorting order
 
     constructor(
         public folderId: number,
@@ -367,6 +368,7 @@ export class RunboxWebmailAPI {
                     folder.folder,
                     folderLevel - 1
                 );
+                folderCountEntry.priority = folder.priority;
 
                 return folder.subfolders.length > 0 ?
                     [folderCountEntry].concat(flattenFolders(folder.subfolders)) : folderCountEntry;
@@ -379,7 +381,11 @@ export class RunboxWebmailAPI {
             return flattenedFolders;
         };
         return this.http.get('/rest/v1/email_folder/list').pipe(
-            map((response: any) => flattenFolders(response.result.folders).flat(depth))
+            map((response: any) =>
+                flattenFolders(response.result.folders)
+                .flat(depth)
+                .sort((a, b) => a.priority - b.priority)
+            )
         );
     }
 
